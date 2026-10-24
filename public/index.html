@@ -253,7 +253,7 @@ function issueList(issues) {
     el('div', {}, el('span', { class: 'cat' }, catLabel[i.category]), el('strong', {}, i.title), i.value ? el('span', { class: 'val' }, ' — ' + i.value) : null),
     i.action ? el('div', {}, el('b', {}, 'Qué hacer: '), i.action) : null,
     i.why ? el('div', { class: 'why' }, el('b', {}, 'Por qué: '), i.why) : null,
-    i.where.length ? el('div', {}, el('b', {}, 'Dónde: '), el('ul', {}, ...i.where.map(w => el('li', {}, w)))) : null)));
+    i.where?.length ? el('div', {}, el('b', {}, 'Dónde: '), el('ul', {}, ...i.where.map(w => el('li', {}, w)))) : null)));
 }
 $('#form').addEventListener('submit', async e => {
   e.preventDefault();

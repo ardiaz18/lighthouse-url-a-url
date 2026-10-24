@@ -1,5 +1,5 @@
 import http from 'node:http';
-import { actions } from './actions.mjs';
+import { actions, metricSources } from './actions.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -127,8 +127,8 @@ function priority(scores) {
   const level = values.some(v => v < 50) || severity >= 25 ? 'alta' : values.some(v => v < 90) ? 'media' : 'baja';
   return { severity, level };
 }
-// Auditorías suspendidas que piden una acción (no las métricas), con qué hacer,
-// dónde (recursos o elementos afectados) y ahorro estimado; ordenadas por impacto
+// Auditorías suspendidas con qué hacer, por qué y dónde (recursos o elementos
+// afectados, con su medida); ordenadas por impacto
 const plain = text => String(text || '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
 function why(description) {
   const sentences = plain(description).split(/(?<=\.)\s+/).filter(s => !/^(Más información|Consulta|Obtén|Descubre|Learn more|More information)/i.test(s));
@@ -141,28 +141,59 @@ function nodeNote(item) {
 }
 const shortUrl = u => { try { const x = new URL(u); return (x.host + x.pathname).replace(/^www\./, '').slice(0, 90); } catch { return String(u).slice(0, 90); } };
 const kib = b => b >= 1024 ? Math.round(b / 1024) + ' KiB' : Math.round(b) + ' B';
-function where(details) {
-  return (details?.items || []).slice(0, 5).map(item => {
+const ms = v => `${Math.round(v)} ms`;
+// Los «insights» guardan sus tablas dentro de una lista; los nodos sueltos también cuentan
+function rows(details) {
+  if (!details) return [];
+  if (details.type === 'list') return details.items.flatMap(i => i.type === 'node' ? [{ node: i }] : rows(i));
+  if (details.type === 'list-section') return rows(details.value);
+  if (details.type === 'network-tree') return [{ chain: longestChain(details.chains) }];
+  return details.items || [];
+}
+function longestChain(chains, path = []) {
+  const next = Object.values(chains || {}).find(c => c.isLongest) || Object.values(chains || {})[0];
+  return next ? longestChain(next.children, [...path, next]) : path;
+}
+function where(details, max = 5) {
+  return rows(details).filter(item => item.node?.type !== 'text').slice(0, max).map(item => {
+    if (item.chain) return item.chain.length ? `${item.chain.map(c => shortUrl(c.url)).join(' → ')} — ${ms(item.chain.at(-1).navStartToEndTime)}` : '';
     const node = item.node || item.source?.node;
     const url = item.url || item.source?.url || (typeof item.source === 'string' ? item.source : '');
-    const label = node ? `${node.nodeLabel ? `«${String(node.nodeLabel).slice(0, 60)}» ` : ''}${node.selector ? `(${node.selector})` : ''}`.trim() : url ? shortUrl(url) : plain(item.reason || item.description || '').slice(0, 140);
-    const saving = nodeNote(item) || (item.wastedMs ? `${Math.round(item.wastedMs)} ms` : item.wastedBytes ? kib(item.wastedBytes) : '');
-    return label && (saving ? `${label} — ${saving}` : label);
+    const label = node ? `${node.nodeLabel ? `«${String(node.nodeLabel).slice(0, 60)}» ` : ''}${node.selector ? `(${node.selector})` : ''}`.trim()
+      : item.name && url ? `${item.name} (${shortUrl(url)})`
+      : url ? shortUrl(url)
+      : plain(item.label || item.reason || item.issueType || item.groupLabel || item.description || '').slice(0, 140);
+    const measure = nodeNote(item)
+      || (item.wastedMs ? ms(item.wastedMs) : item.wastedBytes ? kib(item.wastedBytes)
+      : item.total ? `${ms(item.total)} de CPU` : item.totalBytes ? kib(item.totalBytes) : item.reflowTime ? `${ms(item.reflowTime)} recalculando` : item.duration ? ms(item.duration)
+      : item.score ? `desplazamiento ${item.score.toFixed(3).replace('.', ',')}` : '');
+    return label && (measure ? `${label} — ${measure}` : label);
   }).filter(Boolean);
 }
+const skipModes = ['informative', 'notApplicable', 'manual', 'error'];
 function issues(lh) {
   const out = [];
+  const add = (a, category, weight) => {
+    const savingsMs = Object.values(a.metricSavings || {}).reduce((t, v) => t + (v || 0), 0);
+    // las métricas no traen detalle: su «Dónde» sale de las auditorías que las causan
+    const place = metricSources[a.id] ? metricSources[a.id].flatMap(id => where(lh.audits?.[id]?.details, 3)).slice(0, 6) : where(a.details);
+    out.push({
+      id: a.id, category, title: plain(a.title), value: a.displayValue || '', score: Math.round(a.score * 100),
+      action: actions[a.id] || '', why: why(a.description), where: place,
+      impact: weight + savingsMs / 200 + (1 - a.score)
+    });
+  };
   for (const cat of Object.values(lh.categories || {})) {
     for (const ref of cat.auditRefs || []) {
       const a = lh.audits?.[ref.id];
-      if (!a || ref.group === 'metrics' || a.score == null || a.score >= 0.9 || ['informative', 'notApplicable', 'manual', 'error'].includes(a.scoreDisplayMode)) continue;
-      const savingsMs = Object.values(a.metricSavings || {}).reduce((t, v) => t + (v || 0), 0);
-      out.push({
-        id: a.id, category: cat.id, title: plain(a.title), value: a.displayValue || '', score: Math.round(a.score * 100),
-        action: actions[a.id] || '', why: why(a.description), where: where(a.details),
-        impact: (ref.weight || 0) + savingsMs / 200 + (1 - a.score)
-      });
+      if (!a || a.score == null || a.score >= 0.9 || skipModes.includes(a.scoreDisplayMode)) continue;
+      add(a, cat.id, ref.weight || 0);
     }
+  }
+  // métricas que Lighthouse calcula pero no puntúa (Time to Interactive, Max Potential FID)
+  for (const id of Object.keys(metricSources)) {
+    const a = lh.audits?.[id];
+    if (a && a.score != null && a.score < 0.9 && !out.some(i => i.id === id)) add(a, 'performance', 0);
   }
   return out.sort((a, b) => b.impact - a.impact);
 }

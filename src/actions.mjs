@@ -1,11 +1,19 @@
 // Qué hacer, en imperativo, para las auditorías Lighthouse más habituales.
 // Las que no estén aquí muestran solo la explicación del propio Lighthouse.
 export const actions = {
+  // Métricas: «Dónde» muestra su causa (ver metricSources en server.mjs)
+  'largest-contentful-paint': 'Acelera el elemento más grande de la primera pantalla (indicado en «Dónde»). Si es una imagen: comprímela en WebP/AVIF, quítale el lazy-load y añade fetchpriority="high". Si es texto: precarga la fuente y usa font-display: swap. Mira también qué fase tarda más: tiempo de servidor alto → caché de página o CDN; retraso de renderizado → quita CSS/JS bloqueante y animaciones (Lottie, sliders) de la cabecera.',
+  'total-blocking-time': 'Reduce el JavaScript que se ejecuta al cargar. «Dónde» muestra los scripts que más CPU consumen: desactiva los plugins que no aportan, retrasa analítica, chat y píxeles hasta la primera interacción (opción «Delay JavaScript» de WP Rocket, Perfmatters o LiteSpeed) y carga cada script solo en las páginas que lo usan.',
+  'cumulative-layout-shift': 'Evita que el contenido se mueva mientras carga. En los elementos de «Dónde»: pon width y height (o aspect-ratio) a imágenes, vídeos e iframes; reserva el espacio de banners de cookies, anuncios y widgets; y no insertes contenido encima de lo que ya se ve. Si se mueve el texto al cargar la fuente, usa una fuente de respaldo con métricas ajustadas.',
+  'speed-index': 'Haz que la primera pantalla se pinte antes: quita el CSS/JS que bloquea el renderizado (ver «Dónde»), inserta el CSS crítico en línea, prioriza la imagen principal y evita sliders o animaciones pesadas arriba del todo.',
+  'first-contentful-paint': 'Reduce lo que retrasa el primer contenido visible: tiempo de respuesta del servidor (caché de página, CDN), CSS y fuentes que bloquean el renderizado (ver «Dónde») y redirecciones previas.',
+  'interactive': 'La página tarda en responder de forma fiable por exceso de JavaScript. «Dónde» muestra los scripts más pesados: elimina los que no aportan, retrasa los de terceros (analítica, chat, mapas, píxeles) y carga cada uno solo donde se use.',
+  'max-potential-fid': 'Una tarea larga de JavaScript bloquearía el primer clic. Localiza en «Dónde» el script que la provoca y aplaza su carga, divídelo o sustitúyelo por una alternativa más ligera.',
   // Rendimiento
-  'render-blocking-insight': 'Pospón o inserta en línea el CSS crítico y carga el JS con defer/async. Para Google Fonts: alójalas en tu servidor o usa preconnect + font-display: swap.',
+  'render-blocking-insight': 'Los archivos de «Dónde» impiden pintar la página hasta que se descargan. CSS: genera el CSS crítico en línea y carga el resto en diferido. JS: añade defer o async. Google Fonts: alójalas en tu servidor o usa preconnect + font-display: swap. En WordPress lo resuelven WP Rocket, Perfmatters, LiteSpeed Cache o Autoptimize.',
   'render-blocking-resources': 'Pospón o inserta en línea el CSS crítico y carga el JS con defer/async.',
   'lcp-discovery-insight': 'Haz que la imagen LCP aparezca en el HTML inicial: quítale loading="lazy", añade fetchpriority="high" y, si es un fondo CSS, precárgala con <link rel="preload">.',
-  'lcp-breakdown-insight': 'Reduce la fase más lenta del LCP: respuesta del servidor (caché de página/CDN), retraso de carga (precarga la imagen) o renderizado (menos CSS/JS bloqueante).',
+  'lcp-breakdown-insight': 'Mira en «Dónde» qué fase del LCP tarda más y actúa sobre ella. Time to First Byte alto → caché de página, CDN o mejor hosting. Retraso de carga → precarga la imagen LCP con fetchpriority="high". Retraso de renderizado → quita CSS/JS bloqueante y animaciones (Lottie, sliders) de la primera pantalla.',
   'document-latency-insight': 'Reduce el tiempo de respuesta del HTML: caché de página, compresión y sin redirecciones previas.',
   'server-response-time': 'Reduce el tiempo de respuesta del servidor: caché de página, CDN o mejor hosting.',
   'cache-insight': 'Configura Cache-Control con una duración larga (p. ej. max-age=31536000) para imágenes, CSS, JS y fuentes.',
@@ -18,13 +26,13 @@ export const actions = {
   'third-parties-insight': 'Revisa los scripts de terceros: elimina los que no aportan y carga el resto en diferido o tras la interacción.',
   'unused-javascript': 'Elimina o carga solo donde haga falta el JavaScript que esta página no usa (plugins, librerías globales).',
   'unused-css-rules': 'Elimina o carga solo donde haga falta el CSS que esta página no usa.',
-  'legacy-javascript-insight': 'Sirve JavaScript moderno sin polyfills innecesarios (ajusta el objetivo de compilación o el plugin que lo añade).',
+  'legacy-javascript-insight': 'El archivo de «Dónde» incluye polyfills para navegadores antiguos que ya no hacen falta. En WordPress suele ser wp-polyfill: no lo cargues en el front si ningún plugin lo necesita (Perfmatters o Asset CleanUp lo permiten). En código propio, compila para navegadores modernos.',
   'duplicated-javascript-insight': 'Elimina las librerías JavaScript cargadas más de una vez.',
-  'network-dependency-tree-insight': 'Acorta las cadenas de solicitudes críticas: preconnect/preload para los recursos clave y pospón lo que no se necesita al inicio.',
-  'forced-reflow-insight': 'Revisa el JavaScript que lee medidas del DOM (offsetWidth, getBoundingClientRect) justo después de modificarlo; agrupa primero las lecturas y luego las escrituras.',
-  'bf-cache': 'Quita lo que impide la caché de avance/retroceso (los motivos aparecen en «Dónde»): Cache-Control: no-store en el HTML, eventos unload o conexiones abiertas.',
+  'network-dependency-tree-insight': '«Dónde» muestra la cadena de peticiones más larga: cada recurso espera al anterior. Acórtala: precarga (preload) los recursos que se descubren tarde, añade preconnect a los dominios externos de la cadena y aplaza o quita lo que no se necesita para la primera pantalla.',
+  'forced-reflow-insight': 'El script de «Dónde» lee medidas de la página justo después de cambiarla y obliga al navegador a recalcular el diseño. Si es de un plugin: actualízalo, cárgalo en diferido o sustitúyelo. Si es código propio: agrupa primero las lecturas (offsetWidth, getBoundingClientRect) y después las escrituras, o usa requestAnimationFrame.',
+  'bf-cache': 'Corrige los motivos de «Dónde» para que el botón «atrás» sea instantáneo. El más habitual es la cabecera Cache-Control: no-store en el HTML (la añaden plugins de cookies, WooCommerce o el hosting): quítala en las páginas públicas. Evita también los eventos unload en JavaScript.',
   'dom-size-insight': 'Reduce el número de elementos HTML: simplifica plantillas, menús y bloques ocultos.',
-  'cls-culprits-insight': 'Reserva el espacio de imágenes, anuncios e iframes (width/height o aspect-ratio) y no insertes contenido encima de lo ya visible.',
+  'cls-culprits-insight': 'Los elementos de «Dónde» se desplazan al cargar. Reserva su espacio (width/height o aspect-ratio en imágenes, iframes y vídeos; altura mínima en banners, menús y widgets) y no insertes contenido encima de lo ya visible.',
   'modern-http-insight': 'Activa HTTP/2 o HTTP/3 en el servidor o la CDN.',
   'viewport-insight': 'Usa <meta name="viewport" content="width=device-width, initial-scale=1"> sin bloquear el zoom.',
   'bootup-time': 'Reduce y divide el JavaScript que se ejecuta al cargar; pospón lo que no sea esencial.',
@@ -53,14 +61,15 @@ export const actions = {
   'listitem': 'Coloca cada <li> dentro de un <ul> u <ol>.',
   'frame-title': 'Añade un title descriptivo a cada iframe.',
   'meta-viewport': 'Permite el zoom: quita user-scalable=no y maximum-scale bajos del meta viewport.',
-  'aria-allowed-attr': 'Elimina los atributos ARIA que no corresponden al rol del elemento.',
+  'aria-prohibited-attr': 'Quita los atributos ARIA no permitidos en los elementos de «Dónde» (p. ej. aria-label en un <div> o <span> sin rol). Si el elemento necesita un nombre accesible, dale un rol adecuado o usa texto visible.',
+  'aria-allowed-attr':'Elimina los atributos ARIA que no corresponden al rol del elemento.',
   'duplicate-id-aria': 'Haz únicos los id referenciados por atributos ARIA.',
   // Buenas prácticas
   'errors-in-console': 'Corrige los errores de JavaScript que aparecen en la consola.',
-  'inspector-issues': 'Revisa y corrige los avisos del panel Issues de Chrome DevTools.',
+  'inspector-issues': 'Abre esta URL en Chrome, pulsa F12 → pestaña «Issues» y corrige cada aviso. «Dónde» indica el tipo de problema y el recurso; suelen ser cookies o scripts de terceros.',
   'image-aspect-ratio': 'Muestra las imágenes con su proporción original (width/height coherentes).',
   'image-size-responsive': 'Sirve imágenes con resolución suficiente para pantallas de alta densidad (srcset con 2x).',
-  'third-party-cookies': 'Sustituye o elimina los servicios que dependen de cookies de terceros.',
+  'third-party-cookies': 'Identifica en «Dónde» el servicio que crea cada cookie. Si no es imprescindible, elimínalo; si lo es, cárgalo solo tras el consentimiento y comprueba si tiene una versión sin cookies de terceros. Chrome las bloqueará cada vez más.',
   'deprecations': 'Sustituye las APIs obsoletas que usa la página.',
   'is-on-https': 'Sirve la página y todos sus recursos por HTTPS.',
   // SEO
@@ -74,4 +83,15 @@ export const actions = {
   'robots-txt': 'Corrige los errores de sintaxis del robots.txt.',
   'http-status-code': 'Haz que la página responda con código 200.',
   'structured-data': 'Corrige los errores de los datos estructurados.'
+};
+
+// Auditorías de las que sale el «Dónde» de cada métrica (sus causas)
+export const metricSources = {
+  'largest-contentful-paint': ['lcp-breakdown-insight', 'lcp-discovery-insight'],
+  'total-blocking-time': ['bootup-time', 'long-tasks'],
+  'interactive': ['bootup-time', 'third-parties-insight'],
+  'max-potential-fid': ['long-tasks', 'bootup-time'],
+  'cumulative-layout-shift': ['cls-culprits-insight', 'layout-shifts'],
+  'speed-index': ['render-blocking-insight', 'lcp-breakdown-insight'],
+  'first-contentful-paint': ['render-blocking-insight', 'document-latency-insight']
 };

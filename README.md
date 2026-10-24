@@ -5,7 +5,8 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 - Rastrea el sitio (sitemap, robots.txt y enlaces internos) y ejecuta Lighthouse en cada URL, en móvil o escritorio.
 - Muestra el **informe Lighthouse completo de cada URL**, en español.
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
-- Exporta un resumen priorizado en **Markdown para Claude** (copiar o descargar) y en **CSV** para hojas de cálculo.
+- **Analiza con Claude** (API) cada auditoría: diagnóstico, problemas agrupados por causa y plan de acción. El análisis se guarda junto al informe.
+- Exporta el resumen priorizado en Markdown y CSV.
 
 ## Requisitos
 
@@ -27,13 +28,17 @@ CLI original de Unlighthouse, sin panel: `npm run audit -- --site https://ejempl
 
 ## Analizar con Claude
 
-- **Copiar para Claude**: copia un resumen priorizado con instrucciones; pégalo en una conversación con Claude.
-- **Claude Code**: abre la carpeta del proyecto y pide «analiza la última auditoría». `CLAUDE.md` le indica dónde están los informes y cómo priorizarlos.
+1. Crea una clave en https://platform.claude.com/settings/keys (se factura por uso).
+2. Copia `.env.example` como `.env` y pega la clave en `ANTHROPIC_API_KEY=`.
+3. Reinicia (`npm run dev`) y pulsa **Analizar con Claude** en una auditoría.
+
+También puedes abrir la carpeta con Claude Code y pedir «analiza la última auditoría»: `CLAUDE.md` le indica dónde están los informes.
 
 ## Limitaciones
 
 - Solo escucha en 127.0.0.1. No publicarlo en Internet sin autenticación, control de SSRF y colas.
 - Máximo 2 auditorías simultáneas.
+- No funciona en GitHub Pages: necesita un servidor con Node.js y Chrome.
 - El idioma del informe solo cambia los textos; las mediciones son las de Lighthouse.
 
 ## Créditos

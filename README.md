@@ -10,10 +10,14 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 
 ## Requisitos
 
-- Node.js 22.18 o superior
+- [Node.js](https://nodejs.org) 22.18 o superior (versión LTS)
 - Google Chrome instalado
 
 ## Uso
+
+**En Windows:** haz doble clic en `Iniciar.bat`. La primera vez instala lo necesario (unos minutos); después arranca la herramienta y la abre en el navegador. Deja la ventana negra abierta mientras la uses.
+
+En otros sistemas, o desde la terminal:
 
 ```bash
 npm install

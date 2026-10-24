@@ -1,0 +1,2 @@
+# Iniciar.bat va en la codificación de la consola de Windows (CP850) y con CRLF: no convertir
+*.bat -text

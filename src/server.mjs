@@ -228,4 +228,4 @@ const server = http.createServer(async (req, res) => {
 const stopAll = () => { for (const a of audits.values()) if (a.running) a.child.kill(); process.exit(0); };
 process.on('SIGINT', stopAll);
 process.on('SIGTERM', stopAll);
-server.listen(port, '127.0.0.1', () => console.log(`Alicia Ruiz SEO Tools: http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`Lighthouse completo URL a URL: http://127.0.0.1:${port}`));

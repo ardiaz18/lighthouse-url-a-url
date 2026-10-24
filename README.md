@@ -44,6 +44,7 @@ Para hojas de cálculo usa **Descargar CSV**. Con Claude Code, abre la carpeta d
 
 - Solo escucha en 127.0.0.1. No publicarlo en Internet sin autenticación, control de SSRF y colas.
 - Máximo 2 auditorías simultáneas.
+- Audita como máximo 200 URLs por sitio y 8 por tipo de página (muestreo de Unlighthouse); el panel avisa al llegar al límite.
 - No funciona en GitHub Pages: necesita un servidor con Node.js y Chrome.
 - El idioma del informe solo cambia los textos; las mediciones son las de Lighthouse.
 

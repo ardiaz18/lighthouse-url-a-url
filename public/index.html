@@ -136,6 +136,10 @@ footer a{color:var(--ink)}
       </div>
     </div>
     <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pulsa el número de «Problemas» para ver qué hacer y dónde.</p>
+    <div class="analysis" id="limit-note" hidden>
+      <strong>Se ha alcanzado el límite de 200 URLs.</strong> En sitios grandes la herramienta no audita todas las páginas: se detiene en 200 y analiza como máximo 8 URLs de cada tipo (por ejemplo, 8 fichas de producto, 8 categorías…). Las páginas que comparten plantilla suelen tener los mismos problemas de Lighthouse, así que esta muestra cubre casi todo lo que hay que corregir. Auditar miles de URLs llevaría horas y repetiría los mismos resultados.
+      <br><br>Si quieres revisar páginas concretas que no aparecen, lanza otra auditoría con <strong>Opciones avanzadas → Solo estas rutas</strong>. Ten en cuenta que algunas webs grandes bloquean o ralentizan las visitas automáticas, y eso puede empeorar las puntuaciones o hacer que fallen URLs.
+    </div>
     <div class="table" id="reports"><p class="empty">Todavía no hay informes guardados.</p></div>
     <div class="analysis" id="analysis" hidden></div>
     <div id="viewer"></div>
@@ -205,6 +209,8 @@ async function showResult(key, quiet) {
   $('#exports').hidden = false;
   const reports = await json('/api/results/' + key);
   const current = $('#viewer iframe')?.dataset.src;
+  // Unlighthouse audita como máximo 200 URLs (scanner.maxRoutes) y una muestra por plantilla
+  $('#limit-note').hidden = reports.length < 200;
   $('#reports').replaceChildren(reports.length ? el('table', {},
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])), el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
     el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },

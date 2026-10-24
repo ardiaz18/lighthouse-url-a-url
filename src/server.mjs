@@ -1,4 +1,5 @@
 import http from 'node:http';
+import { actions } from './actions.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -126,17 +127,44 @@ function priority(scores) {
   const level = values.some(v => v < 50) || severity >= 25 ? 'alta' : values.some(v => v < 90) ? 'media' : 'baja';
   return { severity, level };
 }
-// Auditorías suspendidas, ordenadas por su peso en la categoría
+// Auditorías suspendidas que piden una acción (no las métricas), con qué hacer,
+// dónde (recursos o elementos afectados) y ahorro estimado; ordenadas por impacto
+const plain = text => String(text || '').replace(/\[([^\]]+)\]\([^)]*\)/g, '$1').replace(/`/g, '');
+function why(description) {
+  const sentences = plain(description).split(/(?<=\.)\s+/).filter(s => !/^(Más información|Consulta|Obtén|Descubre|Learn more|More information)/i.test(s));
+  return sentences.slice(0, 2).join(' ');
+}
+// Detalle útil que Lighthouse guarda en inglés dentro de cada elemento
+function nodeNote(item) {
+  const c = String(item.node?.explanation || '').match(/contrast of ([\d.]+) \(foreground color: (#\w+), background color: (#\w+)/);
+  return c ? `contraste ${c[1].replace('.', ',')}:1, texto ${c[2]} sobre ${c[3]}` : '';
+}
+const shortUrl = u => { try { const x = new URL(u); return (x.host + x.pathname).replace(/^www\./, '').slice(0, 90); } catch { return String(u).slice(0, 90); } };
+const kib = b => b >= 1024 ? Math.round(b / 1024) + ' KiB' : Math.round(b) + ' B';
+function where(details) {
+  return (details?.items || []).slice(0, 5).map(item => {
+    const node = item.node || item.source?.node;
+    const url = item.url || item.source?.url || (typeof item.source === 'string' ? item.source : '');
+    const label = node ? `${node.nodeLabel ? `«${String(node.nodeLabel).slice(0, 60)}» ` : ''}${node.selector ? `(${node.selector})` : ''}`.trim() : url ? shortUrl(url) : plain(item.reason || item.description || '').slice(0, 140);
+    const saving = nodeNote(item) || (item.wastedMs ? `${Math.round(item.wastedMs)} ms` : item.wastedBytes ? kib(item.wastedBytes) : '');
+    return label && (saving ? `${label} — ${saving}` : label);
+  }).filter(Boolean);
+}
 function issues(lh) {
   const out = [];
   for (const cat of Object.values(lh.categories || {})) {
     for (const ref of cat.auditRefs || []) {
       const a = lh.audits?.[ref.id];
-      if (!a || a.score == null || a.score >= 0.9 || ['informative', 'notApplicable', 'manual', 'error'].includes(a.scoreDisplayMode)) continue;
-      out.push({ id: a.id, category: cat.id, title: a.title, value: a.displayValue || '', score: Math.round(a.score * 100), weight: ref.weight || 0 });
+      if (!a || ref.group === 'metrics' || a.score == null || a.score >= 0.9 || ['informative', 'notApplicable', 'manual', 'error'].includes(a.scoreDisplayMode)) continue;
+      const savingsMs = Object.values(a.metricSavings || {}).reduce((t, v) => t + (v || 0), 0);
+      out.push({
+        id: a.id, category: cat.id, title: plain(a.title), value: a.displayValue || '', score: Math.round(a.score * 100),
+        action: actions[a.id] || '', why: why(a.description), where: where(a.details),
+        impact: (ref.weight || 0) + savingsMs / 200 + (1 - a.score)
+      });
     }
   }
-  return out.sort((a, b) => b.weight - a.weight || a.score - b.score);
+  return out.sort((a, b) => b.impact - a.impact);
 }
 
 const catNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
@@ -162,10 +190,30 @@ async function exportMarkdown(key) {
   ];
   for (const r of reports) {
     lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), '');
-    for (const i of r.issues.slice(0, 10)) lines.push(`- [${catNames[i.category]}] ${i.title}${i.value ? ` — ${i.value}` : ''} (puntuación ${i.score})`);
-    lines.push('');
+    lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
+}
+function issueLines(list, maxWhere) {
+  return list.flatMap(i => [
+    `- [${catNames[i.category]}] **${i.title}**${i.value ? ` — ${i.value}` : ''}`,
+    ...(i.action ? [`  - Qué hacer: ${i.action}`] : []),
+    ...(i.why ? [`  - Por qué: ${i.why}`] : []),
+    ...(i.where?.length ? [`  - Dónde: ${i.where.slice(0, maxWhere).join('; ')}`] : [])
+  ]);
+}
+async function exportUrlMarkdown(key, url) {
+  const r = (await resultReports(key)).find(x => x.url === url);
+  if (!r) throw Error('URL no encontrada en esta auditoría');
+  return [
+    `# Informe Lighthouse — ${r.url}`, '',
+    `- Fecha: ${r.fetchTime ? new Date(r.fetchTime).toLocaleString('es-ES') : '—'}`,
+    `- Dispositivo: ${r.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
+    `- Prioridad: ${levelNames[r.level]} (gravedad ${r.severity})`,
+    `- Puntuaciones: ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), '',
+    '## Problemas ordenados por impacto', '',
+    ...issueLines(r.issues, 5)
+  ].join('\n');
 }
 async function exportCsv(key) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
@@ -209,9 +257,11 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && path === '/api/results') return send(200, await listResults());
     const exp = path.match(/^\/api\/export\/(md|csv)\/(.+)$/);
     if (req.method === 'GET' && exp) {
-      const name = `lighthouse-${exp[2].replace(/[^\w.-]+/g, '-')}.${exp[1]}`;
+      const pageUrl = new URL(req.url, 'http://x').searchParams.get('url');
+      const body = exp[1] === 'csv' ? await exportCsv(exp[2]) : pageUrl ? await exportUrlMarkdown(exp[2], pageUrl) : await exportMarkdown(exp[2]);
+      const name = `lighthouse-${(pageUrl ? shortUrl(pageUrl) : exp[2]).replace(/[^\w.-]+/g, '-').replace(/-+$/, '')}.${exp[1]}`;
       res.writeHead(200, { 'Content-Type': (exp[1] === 'md' ? 'text/markdown' : 'text/csv') + '; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` });
-      return res.end(exp[1] === 'md' ? await exportMarkdown(exp[2]) : await exportCsv(exp[2]));
+      return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     const m = path.match(/^\/api\/audits\/(\d+)(\/stop|\/log)$/);

@@ -4,6 +4,7 @@ Panel local (`npm run dev`, http://127.0.0.1:4173) que lanza Unlighthouse sin mo
 
 - `src/server.mjs`: panel, API, prioridad por gravedad y exportaciones (`/api/export/md|csv/<dominio>/<id>`).
 - `src/unlighthouse-runner.mjs`: réplica del CLI oficial; solo fija puerto interno y `locale: 'es'`.
+- `src/actions.mjs`: «qué hacer» en español para las auditorías Lighthouse habituales.
 - `public/index.html`: interfaz (estilo aliciaruiz.es).
 
 No alterar mediciones ni configuración de Lighthouse más allá del idioma.

@@ -15,7 +15,6 @@ body{background:var(--white);color:var(--ink-2);font-family:var(--f-q);line-heig
 nav{border-bottom:1px solid var(--rule);background:rgba(255,255,255,.94);position:sticky;top:0;z-index:5}
 .nav-inner{display:flex;align-items:center;justify-content:space-between;height:60px}
 .nav-logo{display:flex;align-items:center;gap:.55rem;font-family:var(--f-j);font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
-.nav-logo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--coral);flex-shrink:0}
 .nav-icons{display:flex;gap:.4rem}
 .nav-icons a{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);transition:border-color .15s,color .15s}
 .nav-icons a:hover{border-color:var(--ink);color:var(--coral-h)}
@@ -23,7 +22,6 @@ nav{border-bottom:1px solid var(--rule);background:rgba(255,255,255,.94);positio
 @media(max-width:480px){.nav-logo{font-size:.88rem}.nav-icons a{width:34px;height:34px}}
 .hero{padding:clamp(2rem,4vw,3rem) 0 2rem;border-bottom:1px solid var(--rule);background:var(--bg)}
 .eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--f-j);font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coral-h)}
-.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--coral)}
 h2{font-family:var(--f-j);font-size:1.25rem;font-weight:800;color:var(--ink);letter-spacing:-.02em}
 .sub{font-size:1.05rem;color:var(--ink-3);max-width:70ch;margin-top:.8rem}
 .sub+.sub{margin-top:.6rem}
@@ -75,6 +73,14 @@ tr.sel td{background:var(--coral-bg)}
 .analysis h3:first-child{margin-top:0}
 .analysis ul,.analysis ol{padding-left:1.3rem}
 .analysis p{margin:.5rem 0}
+.issues-row td{background:var(--bg);padding:1rem 1.25rem}
+ol.issues{margin:0;padding-left:1.4rem;display:grid;gap:.9rem;font-size:.88rem;position:sticky;left:1.25rem;max-width:min(60rem,calc(100vw - 7rem))}
+ol.issues ul{margin:.2rem 0 0;padding-left:1.1rem;color:var(--ink-3);overflow-wrap:anywhere}
+ol.issues b{font-family:var(--f-j);font-size:.8rem;color:var(--ink)}
+ol.issues strong{color:var(--ink)}
+ol.issues .cat{font-family:var(--f-j);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--coral-h);margin-right:.5rem}
+ol.issues .val{color:var(--ink-3)}
+ol.issues .why{color:var(--ink-3)}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
 pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{color:var(--ink-3);font-size:.95rem}
@@ -129,7 +135,7 @@ footer a{color:var(--ink)}
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
       </div>
     </div>
-    <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pasa el ratón por «Problemas» para ver los principales.</p>
+    <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pulsa el número de «Problemas» para ver qué hacer y dónde.</p>
     <div class="table" id="reports"><p class="empty">Todavía no hay informes guardados.</p></div>
     <div class="analysis" id="analysis" hidden></div>
     <div id="viewer"></div>
@@ -140,6 +146,8 @@ footer a{color:var(--ink)}
 const $ = s => document.querySelector(s);
 const labels = { starting: 'Iniciando', scanning: 'Analizando', finished: 'Terminada', stopped: 'Detenida', failed: 'Error' };
 const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad'], ['best-practices', 'Buenas prácticas'], ['seo', 'SEO']];
+const catLabel = Object.fromEntries(cats);
+const openIssues = new Set();
 const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
 let timer, shownKey;
 
@@ -199,11 +207,14 @@ async function showResult(key, quiet) {
   const current = $('#viewer iframe')?.dataset.src;
   $('#reports').replaceChildren(reports.length ? el('table', {},
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])), el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
-    el('tbody', {}, ...reports.map(r => el('tr', { class: r.report === current ? 'sel' : '' },
+    el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },
       el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),
       el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
-      el('td', { title: r.issues.slice(0, 5).map(i => '• ' + i.title).join('\n') }, String(r.issues.length)),
-      el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'))))))
+      el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
+      el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
+        el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL y abre Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url), urlPrompt(r.url)) }, 'Claude'))),
+      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '8' }, issueList(r.issues))) : null
+    ].filter(Boolean))))
     : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
   if (!quiet) $('#reports').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
@@ -223,13 +234,27 @@ const claudePrompt = host => `Te adjunto el resumen de una auditoría Lighthouse
 3. Propón un plan de acción priorizado por impacto y esfuerzo: qué hacer, quién (SEO o desarrollo) y cómo comprobarlo.
 4. Dime qué URLs revisar primero y por qué.
 Básate solo en los datos del archivo.`;
-$('#analyze').addEventListener('click', () => {
-  location.href = '/api/export/md/' + shownKey;
-  window.open('https://claude.ai/new?q=' + encodeURIComponent(claudePrompt(shownKey.split('/')[0])), '_blank', 'noopener');
+const urlPrompt = url => `Te adjunto el informe Lighthouse de ${url} (archivo .md descargado de mi herramienta), con los problemas ordenados por impacto, qué hacer y dónde. Actúa como consultor/a senior de SEO técnico y rendimiento web y, en español:
+1. Explica en 2-3 frases el estado de la página.
+2. Para cada problema relevante, di exactamente qué cambiar, en qué recurso o elemento, quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.
+3. Ordena las tareas por impacto y esfuerzo, empezando por las victorias rápidas.
+Básate solo en los datos del archivo.`;
+function analyzeWithClaude(mdUrl, prompt) {
+  location.href = mdUrl;
+  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank', 'noopener');
   const box = $('#analysis');
   box.hidden = false;
-  box.innerHTML = '<strong>Se ha descargado el resumen (.md) y se ha abierto Claude en otra pestaña.</strong> Adjunta el archivo en la conversación (arrástralo o usa el clip) y envía el mensaje, que ya está escrito. Para analizar en una hoja de cálculo, usa <strong>Descargar CSV</strong>.';
-});
+  box.innerHTML = '<strong>Se ha descargado el informe (.md) y se ha abierto Claude en otra pestaña.</strong> Adjunta el archivo en la conversación (arrástralo o usa el clip) y envía el mensaje, que ya está escrito.';
+  box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+$('#analyze').addEventListener('click', () => analyzeWithClaude('/api/export/md/' + shownKey, claudePrompt(shownKey.split('/')[0])));
+function issueList(issues) {
+  return el('ol', { class: 'issues' }, ...issues.map(i => el('li', {},
+    el('div', {}, el('span', { class: 'cat' }, catLabel[i.category]), el('strong', {}, i.title), i.value ? el('span', { class: 'val' }, ' — ' + i.value) : null),
+    i.action ? el('div', {}, el('b', {}, 'Qué hacer: '), i.action) : null,
+    i.why ? el('div', { class: 'why' }, el('b', {}, 'Por qué: '), i.why) : null,
+    i.where.length ? el('div', {}, el('b', {}, 'Dónde: '), el('ul', {}, ...i.where.map(w => el('li', {}, w)))) : null)));
+}
 $('#form').addEventListener('submit', async e => {
   e.preventDefault();
   $('#run').disabled = true; $('#msg').textContent = '';

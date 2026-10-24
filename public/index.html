@@ -90,6 +90,8 @@ dialog h3{font-family:var(--f-j);font-size:.95rem;color:var(--ink);margin:1rem 0
 dialog label{margin-top:.8rem}
 dialog input{width:100%;font:inherit;padding:.7rem .9rem;border:1.5px solid var(--rule);border-radius:12px}
 dialog input:focus{outline:none;border-color:var(--coral)}
+.origin-note{position:sticky;left:0;border:1px solid var(--rule);border-radius:12px;padding:.8rem 1rem;margin-bottom:.8rem;background:var(--bg);font-size:.9rem;display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center}
+.origin-note .meta{flex-basis:100%;margin:0}
 .vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:13rem}
 .vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
@@ -235,7 +237,7 @@ async function showResult(key, quiet) {
   const current = $('#viewer iframe')?.dataset.src;
   // Unlighthouse audita como máximo 200 URLs (scanner.maxRoutes) y una muestra por plantilla
   $('#limit-note').hidden = reports.length < 200;
-  $('#reports').replaceChildren(reports.length ? el('table', {},
+  $('#reports').replaceChildren(...(reports.length ? [originNote(reports)].filter(Boolean) : []), reports.length ? el('table', {},
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
         settings.crux?.enabled ? null : el('button', { class: 'btn-link', onclick: openSettings }, 'Activar')),
@@ -268,12 +270,25 @@ function fieldCell(r) {
   if (!settings.crux?.enabled) return el('span', { class: 'meta' }, '—');
   if (r.field === undefined) return el('span', { class: 'meta', title: fieldError[shownKey] || '' }, fieldError[shownKey] ? 'Error ⓘ' : 'Consultando…');
   if (!r.field) return el('span', { class: 'meta', title: 'Google no tiene datos suficientes de esta URL ni del dominio' }, 'Sin datos');
-  return el('div', { class: 'vitals' },
-    ...['lcp', 'inp', 'cls'].filter(id => r.field.metrics[id]).map(id => {
-      const m = r.field.metrics[id];
-      return el('span', { class: 'score ' + ratingClass[m.rating], title: `${id.toUpperCase()} real: ${ratingText[m.rating]}` }, `${id.toUpperCase()} ${fieldFmt[id](m.p75)}`);
-    }),
-    r.field.scope === 'origin' ? el('span', { class: 'meta', title: 'Esta URL no tiene tráfico suficiente; se muestran los datos de todo el dominio' }, 'dominio') : null);
+  // sin tráfico propio: el dato del dominio se muestra una sola vez, encima de la tabla
+  if (r.field.scope === 'origin') return el('span', { class: 'meta', title: 'Esta URL no tiene tráfico suficiente para que Google publique sus datos; mira el dato del dominio encima de la tabla' }, 'Solo dominio');
+  return vitalChips(r.field);
+}
+function vitalChips(field) {
+  return el('div', { class: 'vitals' }, ...['lcp', 'inp', 'cls'].filter(id => field.metrics[id]).map(id => {
+    const m = field.metrics[id];
+    return el('span', { class: 'score ' + ratingClass[m.rating], title: `${id.toUpperCase()} real: ${ratingText[m.rating]}` }, `${id.toUpperCase()} ${fieldFmt[id](m.p75)}`);
+  }));
+}
+function originNote(reports) {
+  const origin = reports.find(r => r.field?.scope === 'origin')?.field;
+  if (!settings.crux?.enabled || !origin) return null;
+  const own = reports.filter(r => r.field?.scope === 'url').length;
+  return el('div', { class: 'origin-note' },
+    el('span', {}, el('strong', {}, 'Usuarios reales del dominio'), ' (CrUX, percentil 75, últimos 28 días): '), vitalChips(origin),
+    el('p', { class: 'meta' }, own
+      ? `${own} de ${reports.length} URLs tienen datos propios, que aparecen en su fila. El resto no tiene tráfico suficiente para que Google publique sus datos.`
+      : 'Ninguna URL tiene tráfico suficiente para que Google publique sus datos por separado: este es el dato de todo el dominio.'));
 }
 // Ajustes: clave de CrUX guardada solo en este equipo
 async function loadSettings() { settings = await json('/api/settings'); }

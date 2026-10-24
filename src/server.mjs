@@ -239,11 +239,13 @@ async function exportMarkdown(key) {
     e.urls++;
     repeated.set(i.id, e);
   }
+  const originField = reports.find(r => r.field?.scope === 'origin')?.field;
   const lines = [
     `# Auditoría Lighthouse — ${key.split('/')[0]}`, '',
     `- Fecha: ${first.fetchTime ? new Date(first.fetchTime).toLocaleString('es-ES') : '—'}`,
     `- Dispositivo: ${first.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
-    `- URLs analizadas: ${reports.length}`, '',
+    `- URLs analizadas: ${reports.length}`,
+    ...(originField ? fieldLine(originField).map(l => l.replace(', datos de todo el dominio: esta URL no tiene tráfico suficiente', ', todo el dominio')) : []), '',
     ...claudeBrief([
       'Haz un diagnóstico general del sitio en 3-5 frases.',
       'Agrupa los problemas por causa común (plantilla, plugin, recurso compartido, servidor) e indica a qué URLs afectan.',
@@ -255,7 +257,7 @@ async function exportMarkdown(key) {
     '## URLs por prioridad', ''
   ];
   for (const r of reports) {
-    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field), '');
+    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field, !!originField), '');
     lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
@@ -274,9 +276,10 @@ function claudeBrief(tasks) {
 const ratingNames = { good: 'bueno', needs: 'mejorable', poor: 'malo' };
 const fieldFormat = { lcp: v => `${(v / 1000).toFixed(1).replace('.', ',')} s`, inp: v => `${Math.round(v)} ms`, cls: v => v.toFixed(2).replace('.', ','), fcp: v => `${(v / 1000).toFixed(1).replace('.', ',')} s`, ttfb: v => `${(v / 1000).toFixed(1).replace('.', ',')} s` };
 const fieldNames = { lcp: 'LCP', inp: 'INP', cls: 'CLS', fcp: 'FCP', ttfb: 'TTFB' };
-function fieldLine(f) {
+function fieldLine(f, originShownAbove) {
   if (f === undefined) return [];
   if (!f) return ['- Usuarios reales (CrUX): Google no tiene datos suficientes de esta URL ni del dominio.'];
+  if (f.scope === 'origin' && originShownAbove) return ['- Usuarios reales (CrUX): sin datos propios por falta de tráfico; ver el dato del dominio al principio.'];
   const values = Object.entries(f.metrics).map(([id, m]) => `${fieldNames[id]} ${fieldFormat[id](m.p75)} (${ratingNames[m.rating]})`).join(' · ');
   return [`- Usuarios reales (CrUX, percentil 75, 28 días${f.scope === 'origin' ? ', datos de todo el dominio: esta URL no tiene tráfico suficiente' : ''}): ${values}`];
 }

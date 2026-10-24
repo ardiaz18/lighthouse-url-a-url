@@ -124,7 +124,7 @@ footer a{color:var(--ink)}
     <h2>Informes Lighthouse</h2>
     <div class="row" style="margin-top:1rem"><select id="results" aria-label="Auditoría guardada"></select>
       <div class="actions" id="exports" hidden>
-        <button class="btn-outline" id="analyze" title="Envía el resumen priorizado a Claude y muestra su diagnóstico y plan de acción">Analizar con Claude</button>
+        <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado y abre Claude con la petición de análisis">Analizar con Claude</button>
         <button class="btn-outline" data-export="md">Descargar .md</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
       </div>
@@ -189,7 +189,7 @@ async function loadResults() {
   if (results.length) showResult(results.some(r => r.key === shownKey) ? shownKey : results[0].key, true);
 }
 async function showResult(key, quiet) {
-  if (key !== shownKey) { $('#viewer').replaceChildren(); loadAnalysis(key); }
+  if (key !== shownKey) { $('#viewer').replaceChildren(); $('#analysis').hidden = true; }
   shownKey = key;
   const sel = $('#results');
   if (![...sel.options].some(o => o.value === key)) sel.append(el('option', { value: key }, key.split('/')[0] + ' · en curso'));
@@ -216,40 +216,19 @@ function view(r) {
 }
 $('#results').addEventListener('change', e => showResult(e.target.value));
 document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => { location.href = '/api/export/' + b.dataset.export + '/' + shownKey; }));
-// Markdown mínimo para mostrar el análisis (el texto se escapa antes)
-function markdown(md) {
-  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-  const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>').replace(/`(.+?)`/g, '<code>$1</code>');
-  let html = '', list = null;
-  const close = () => { if (list) { html += `</${list}>`; list = null; } };
-  for (const line of md.split('\n')) {
-    const h = line.match(/^(#{1,4})\s+(.*)/), ul = line.match(/^\s*[-*]\s+(.*)/), ol = line.match(/^\s*\d+[.)]\s+(.*)/);
-    if (h) { close(); html += `<${h[1].length < 3 ? 'h3' : 'h4'}>${inline(h[2])}</${h[1].length < 3 ? 'h3' : 'h4'}>`; }
-    else if (ul || ol) { const t = ul ? 'ul' : 'ol'; if (list !== t) { close(); html += `<${t}>`; list = t; } html += `<li>${inline((ul || ol)[1])}</li>`; }
-    else if (line.trim()) { close(); html += `<p>${inline(line)}</p>`; }
-    else close();
-  }
-  close();
-  return html;
-}
-async function loadAnalysis(key) {
-  const { text } = await json('/api/analysis/' + key);
-  $('#analysis').hidden = !text;
-  $('#analysis').innerHTML = text ? markdown(text) : '';
-  $('#analyze').textContent = text ? 'Volver a analizar con Claude' : 'Analizar con Claude';
-}
-$('#analyze').addEventListener('click', async () => {
-  const btn = $('#analyze'), box = $('#analysis');
-  btn.disabled = true; btn.textContent = 'Claude está analizando…';
-  box.hidden = false; box.textContent = 'Preparando el análisis…';
-  try {
-    const r = await fetch('/api/analysis/' + shownKey, { method: 'POST' });
-    if (!r.ok) throw Error((await r.json()).error);
-    const reader = r.body.getReader(), dec = new TextDecoder();
-    let text = '';
-    for (let c; !(c = await reader.read()).done;) { text += dec.decode(c.value, { stream: true }); box.innerHTML = markdown(text); }
-  } catch (err) { box.textContent = 'Error: ' + err.message; }
-  finally { btn.disabled = false; btn.textContent = 'Volver a analizar con Claude'; }
+// Descarga el resumen .md y abre claude.ai con la petición ya escrita
+const claudePrompt = host => `Te adjunto el resumen de una auditoría Lighthouse de ${host} (archivo .md descargado de mi herramienta). Actúa como consultor/a senior de SEO técnico y rendimiento web y, en español:
+1. Haz un diagnóstico general en 3-5 frases.
+2. Agrupa los problemas por causa común (plantilla, recurso compartido, servidor) e indica a qué URLs afectan.
+3. Propón un plan de acción priorizado por impacto y esfuerzo: qué hacer, quién (SEO o desarrollo) y cómo comprobarlo.
+4. Dime qué URLs revisar primero y por qué.
+Básate solo en los datos del archivo.`;
+$('#analyze').addEventListener('click', () => {
+  location.href = '/api/export/md/' + shownKey;
+  window.open('https://claude.ai/new?q=' + encodeURIComponent(claudePrompt(shownKey.split('/')[0])), '_blank', 'noopener');
+  const box = $('#analysis');
+  box.hidden = false;
+  box.innerHTML = '<strong>Se ha descargado el resumen (.md) y se ha abierto Claude en otra pestaña.</strong> Adjunta el archivo en la conversación (arrástralo o usa el clip) y envía el mensaje, que ya está escrito. Para analizar en una hoja de cálculo, usa <strong>Descargar CSV</strong>.';
 });
 $('#form').addEventListener('submit', async e => {
   e.preventDefault();

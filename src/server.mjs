@@ -1,12 +1,10 @@
 import http from 'node:http';
 import { fork } from 'node:child_process';
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname, relative, sep } from 'node:path';
-import Anthropic from '@anthropic-ai/sdk';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-try { process.loadEnvFile(join(root, '.env')); } catch {}
 const runner = join(root, 'src', 'unlighthouse-runner.mjs');
 const outputDir = join(root, '.unlighthouse');
 const port = Number(process.env.PORT || 4173);
@@ -98,47 +96,6 @@ async function readReport(file) {
   reportCache.set(file, { mtimeMs, data });
   return data;
 }
-// Análisis con Claude: envía el resumen priorizado y guarda la respuesta junto al informe
-const analysisPrompt = `Eres consultor/a senior de SEO técnico y rendimiento web. Recibirás el resumen de una auditoría Lighthouse de varias URLs de un mismo sitio, ya ordenadas por gravedad.
-
-Escribe en español, en Markdown, para un equipo de SEO y desarrollo:
-1. Diagnóstico general en 3-5 frases.
-2. Problemas agrupados por causa común (plantilla, recurso compartido, configuración del servidor), indicando a qué URLs afectan.
-3. Plan de acción priorizado por impacto y esfuerzo: qué hacer, quién (SEO o desarrollo) y cómo comprobarlo.
-4. URLs que conviene revisar primero y por qué.
-
-Básate solo en los datos recibidos; si algo requiere comprobación adicional, dilo.`;
-const analysisFile = key => {
-  const dir = normalize(join(outputDir, key));
-  if (!dir.startsWith(outputDir + sep)) throw Error('Ruta no válida');
-  return join(dir, 'analisis-claude.md');
-};
-async function analyze(key, res) {
-  if (!process.env.ANTHROPIC_API_KEY) throw Error('Falta la clave de la API de Claude. Crea un archivo .env en la carpeta del proyecto con ANTHROPIC_API_KEY=... y reinicia la herramienta.');
-  const summary = await exportMarkdown(key);
-  const client = new Anthropic();
-  const stream = client.beta.messages.stream({
-    model: process.env.CLAUDE_MODEL || 'claude-opus-5-5',
-    max_tokens: 32000,
-    output_config: { effort: 'high' },
-    betas: ['server-side-fallback-2026-07-01'],
-    fallbacks: 'default',
-    system: [{ type: 'text', text: analysisPrompt, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: summary }]
-  });
-  res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8', 'Cache-Control': 'no-store' });
-  let text = '';
-  stream.on('text', chunk => { text += chunk; res.write(chunk); });
-  try {
-    const message = await stream.finalMessage();
-    if (message.stop_reason === 'refusal') res.write('\n\n_Claude no ha podido completar el análisis._');
-    if (text) await writeFile(analysisFile(key), text, 'utf-8');
-  } catch (e) {
-    res.write(`\n\nError al analizar: ${e.message}`);
-  }
-  res.end();
-}
-
 async function listResults() {
   const results = [];
   for (const host of await readdir(outputDir, { withFileTypes: true }).catch(() => [])) {
@@ -256,9 +213,6 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(200, { 'Content-Type': (exp[1] === 'md' ? 'text/markdown' : 'text/csv') + '; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` });
       return res.end(exp[1] === 'md' ? await exportMarkdown(exp[2]) : await exportCsv(exp[2]));
     }
-    const an = path.match(/^\/api\/analysis\/(.+)$/);
-    if (an && req.method === 'POST') return await analyze(an[1], res);
-    if (an && req.method === 'GET') return send(200, { text: await readFile(analysisFile(an[1]), 'utf-8').catch(() => null), ready: !!process.env.ANTHROPIC_API_KEY });
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     const m = path.match(/^\/api\/audits\/(\d+)(\/stop|\/log)$/);
     const audit = m && audits.get(Number(m[1]));

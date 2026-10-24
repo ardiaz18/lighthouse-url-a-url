@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Lighthouse completo URL a URL</title>
+<title>Site Speed Report</title>
 <link rel="icon" href="/assets/favicon.png">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Questrial&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
@@ -16,6 +16,8 @@ nav{border-bottom:1px solid var(--rule);background:rgba(255,255,255,.94);positio
 .nav-inner{display:flex;align-items:center;justify-content:space-between;height:60px}
 .nav-logo{display:flex;align-items:center;gap:.55rem;font-family:var(--f-j);font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
 .nav-icons{display:flex;gap:.4rem}
+.nav-sub{font-family:var(--f-q);font-weight:400;font-size:.85rem;color:var(--ink-3);letter-spacing:0;margin-left:.4rem}
+@media(max-width:640px){.nav-sub{display:none}}
 .nav-icons a{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);transition:border-color .15s,color .15s}
 .nav-icons a:hover{border-color:var(--ink);color:var(--coral-h)}
 .nav-icons svg{width:18px;height:18px}
@@ -106,7 +108,7 @@ footer a{color:var(--ink)}
 </style>
 </head>
 <body>
-<nav><div class="wrap nav-inner"><a class="nav-logo" href="/">Lighthouse completo URL a URL</a>
+<nav><div class="wrap nav-inner"><a class="nav-logo" href="/">Site Speed Report <span class="nav-sub">Lighthouse + usuarios reales, URL a URL</span></a>
   <div class="nav-icons">
     <button type="button" id="open-settings" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <a href="https://github.com/ardiaz18" target="_blank" rel="noopener" aria-label="Mi perfil de GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>

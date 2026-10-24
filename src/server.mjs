@@ -273,7 +273,7 @@ async function exportMarkdown(key) {
 function claudeBrief(tasks) {
   return [
     '## Instrucciones para Claude', '',
-    'Actúa como consultor/a senior de SEO técnico y rendimiento web. Este archivo contiene datos de Google Lighthouse exportados por la herramienta «Lighthouse completo URL a URL». Analízalos y responde en español:', '',
+    'Actúa como consultor/a senior de SEO técnico y rendimiento web. Este archivo contiene datos de Google Lighthouse exportados por la herramienta «Site Speed Report». Analízalos y responde en español:', '',
     ...tasks.map((t, n) => `${n + 1}. ${t}`), '',
     'Básate solo en los datos de este archivo; si algo requiere comprobarse en la web, dilo. «Qué hacer» y «Dónde» son pistas de la herramienta: concrétalas para este caso.',
     'Las puntuaciones de Lighthouse son de laboratorio (una carga simulada). Cuando haya datos de «Usuarios reales» (CrUX), dales prioridad: son las Core Web Vitals que Google usa como señal, y contrástalos con el laboratorio para explicar diferencias.', '',
@@ -389,4 +389,4 @@ const server = http.createServer(async (req, res) => {
 const stopAll = () => { for (const a of audits.values()) if (a.running) a.child.kill(); process.exit(0); };
 process.on('SIGINT', stopAll);
 process.on('SIGTERM', stopAll);
-server.listen(port, '127.0.0.1', () => console.log(`Lighthouse completo URL a URL: http://127.0.0.1:${port}`));
+server.listen(port, '127.0.0.1', () => console.log(`Site Speed Report: http://127.0.0.1:${port}`));

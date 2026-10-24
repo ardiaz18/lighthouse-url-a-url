@@ -1,4 +1,6 @@
-# Lighthouse completo URL a URL
+# Site Speed Report
+
+*Lighthouse + usuarios reales, URL a URL*
 
 Herramienta local para auditar un sitio completo con **Google Lighthouse**, página a página, usando el motor [Unlighthouse](https://github.com/harlan-zw/unlighthouse) sin modificar sus resultados.
 

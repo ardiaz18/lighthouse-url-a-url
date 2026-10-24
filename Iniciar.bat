@@ -1,5 +1,5 @@
 @echo off
-title Lighthouse completo URL a URL
+title Site Speed Report
 cd /d "%~dp0"
 if not defined PORT set PORT=4173
 set URL=http://127.0.0.1:%PORT%
@@ -43,7 +43,7 @@ if errorlevel 1 (
 
 rem 4. Arranca y abre el navegador
 echo.
-echo Lighthouse completo URL a URL: %URL%
+echo Site Speed Report: %URL%
 echo Deja esta ventana abierta mientras uses la herramienta. Para cerrarla, cierra la ventana.
 echo.
 if not defined NO_ABRIR start "" cmd /c "timeout /t 2 >nul & start "" %URL%"

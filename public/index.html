@@ -81,6 +81,7 @@ ol.issues strong{color:var(--ink)}
 ol.issues .cat{font-family:var(--f-j);font-size:.68rem;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--coral-h);margin-right:.5rem}
 ol.issues .val{color:var(--ink-3)}
 ol.issues .why{color:var(--ink-3)}
+.close-issues{margin-top:1rem;position:sticky;left:1.25rem}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
 pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{color:var(--ink-3);font-size:.95rem}
@@ -109,7 +110,7 @@ footer a{color:var(--ink)}
           <input type="radio" name="device" id="d-mobile" value="mobile" checked><label for="d-mobile">Móvil</label>
           <input type="radio" name="device" id="d-desktop" value="desktop"><label for="d-desktop">Escritorio</label>
         </div>
-        <label class="check"><input type="checkbox" id="javascript"> Ejecutar JavaScript al rastrear (webs SPA)</label>
+        <label class="check" title="Solo cambia cómo se descubren las URLs, no las puntuaciones. Actívalo en webs hechas con React, Vue o Angular."><input type="checkbox" id="javascript"> Ejecutar JavaScript al rastrear (webs SPA)</label>
       </div>
       <details>
         <summary>Opciones avanzadas</summary>
@@ -213,7 +214,8 @@ async function showResult(key, quiet) {
       el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
       el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
         el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL y abre Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url), urlPrompt(r.url)) }, 'Claude'))),
-      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '8' }, issueList(r.issues))) : null
+      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '8' }, issueList(r.issues),
+        el('button', { class: 'btn-outline close-issues', onclick: closeIssues }, 'Cerrar ▴'))) : null
     ].filter(Boolean))))
     : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
   if (!quiet) $('#reports').scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -248,6 +250,23 @@ function analyzeWithClaude(mdUrl, prompt) {
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
 $('#analyze').addEventListener('click', () => analyzeWithClaude('/api/export/md/' + shownKey, claudePrompt(shownKey.split('/')[0])));
+// Cierra la lista de problemas y deja a la vista la fila de su URL
+function closeIssues() {
+  if (!openIssues.size) return;
+  const row = document.querySelector('.issues-row')?.previousElementSibling;
+  const hidden = row && row.getBoundingClientRect().top < 70;
+  openIssues.clear();
+  showResult(shownKey, true).then(() => {
+    if (hidden) {
+      const url = row.querySelector('.url')?.textContent;
+      [...document.querySelectorAll('#reports td.url')].find(td => td.textContent === url)?.scrollIntoView({ block: 'center' });
+    }
+  });
+}
+document.addEventListener('click', e => {
+  if (openIssues.size && !e.target.closest('.issues-row, [aria-expanded]')) closeIssues();
+});
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeIssues(); });
 function issueList(issues) {
   return el('ol', { class: 'issues' }, ...issues.map(i => el('li', {},
     el('div', {}, el('span', { class: 'cat' }, catLabel[i.category]), el('strong', {}, i.title), i.value ? el('span', { class: 'val' }, ' — ' + i.value) : null),

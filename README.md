@@ -7,7 +7,7 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
 - **Analizar con Claude**: descarga un .md con los datos y las instrucciones de análisis ya escritas; basta con soltarlo en una conversación de Claude.
 - Detalla cada problema: qué hacer, por qué y dónde (recursos o elementos concretos).
-- Analizar con Claude también para cada URL, y exportación en Markdown y CSV.
+- Analizar con Claude también para cada URL, y exportación en CSV para hojas de cálculo.
 
 ## Requisitos
 

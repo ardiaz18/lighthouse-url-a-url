@@ -214,7 +214,12 @@ async function exportMarkdown(key) {
     `- Fecha: ${first.fetchTime ? new Date(first.fetchTime).toLocaleString('es-ES') : '—'}`,
     `- Dispositivo: ${first.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
     `- URLs analizadas: ${reports.length}`, '',
-    '> Instrucciones para Claude: actúa como consultor/a de SEO técnico y rendimiento web. Con estos datos de Lighthouse, explica los problemas principales, agrupa los que comparten causa (plantillas, recursos comunes), prioriza por impacto y esfuerzo y propón un plan de acción concreto, empezando por las URLs de prioridad alta.', '',
+    ...claudeBrief([
+      'Haz un diagnóstico general del sitio en 3-5 frases.',
+      'Agrupa los problemas por causa común (plantilla, plugin, recurso compartido, servidor) e indica a qué URLs afectan.',
+      'Propón un plan de acción priorizado por impacto y esfuerzo: qué cambiar exactamente, quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.',
+      'Indica qué URLs revisar primero y por qué.'
+    ]),
     '## Problemas repetidos en varias URLs', '',
     ...[...repeated.values()].sort((a, b) => b.urls - a.urls).slice(0, 20).map(e => `- [${catNames[e.category]}] ${e.title} — ${e.urls} URL${e.urls > 1 ? 's' : ''}`), '',
     '## URLs por prioridad', ''
@@ -224,6 +229,16 @@ async function exportMarkdown(key) {
     lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
+}
+// Petición para Claude al principio del .md: basta con soltar el archivo en una conversación
+function claudeBrief(tasks) {
+  return [
+    '## Instrucciones para Claude', '',
+    'Actúa como consultor/a senior de SEO técnico y rendimiento web. Este archivo contiene datos de Google Lighthouse exportados por la herramienta «Lighthouse completo URL a URL». Analízalos y responde en español:', '',
+    ...tasks.map((t, n) => `${n + 1}. ${t}`), '',
+    'Básate solo en los datos de este archivo; si algo requiere comprobarse en la web, dilo. «Qué hacer» y «Dónde» son pistas de la herramienta: concrétalas para este caso.', '',
+    '---', ''
+  ];
 }
 function issueLines(list, maxWhere) {
   return list.flatMap(i => [
@@ -242,6 +257,11 @@ async function exportUrlMarkdown(key, url) {
     `- Dispositivo: ${r.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
     `- Prioridad: ${levelNames[r.level]} (gravedad ${r.severity})`,
     `- Puntuaciones: ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), '',
+    ...claudeBrief([
+      'Explica en 2-3 frases el estado de la página.',
+      'Para cada problema relevante, di exactamente qué cambiar, en qué recurso o elemento (usa los datos de «Dónde»), quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.',
+      'Ordena las tareas por impacto y esfuerzo, empezando por las victorias rápidas.'
+    ]),
     '## Problemas ordenados por impacto', '',
     ...issueLines(r.issues, 5)
   ].join('\n');

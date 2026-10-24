@@ -98,7 +98,7 @@ footer a{color:var(--ink)}
 <header class="hero"><div class="wrap">
   <div class="eyebrow">Cómo funciona</div>
   <p class="sub">Introduce la URL de un sitio y elige móvil o escritorio. La herramienta rastrea sus páginas (sitemap, robots.txt y enlaces internos) y ejecuta Google Lighthouse en cada URL con el motor Unlighthouse, sin alterar sus resultados.</p>
-  <p class="sub">Al terminar tendrás el informe Lighthouse completo de cada página, ordenado por prioridad, para abrirlo aquí, descargarlo o pasárselo a Claude para que lo interprete.</p>
+  <p class="sub">Al terminar tendrás el informe Lighthouse completo de cada página, ordenado por prioridad, para abrirlo aquí o descargarlo con instrucciones listas para que Claude lo interprete.</p>
 </div></header>
 <main class="wrap">
   <section class="card">
@@ -131,7 +131,7 @@ footer a{color:var(--ink)}
     <h2>Informes Lighthouse</h2>
     <div class="row" style="margin-top:1rem"><select id="results" aria-label="Auditoría guardada"></select>
       <div class="actions" id="exports" hidden>
-        <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado y abre Claude con la petición de análisis">Analizar con Claude</button>
+        <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado con las instrucciones para Claude">Analizar con Claude</button>
         <button class="btn-outline" data-export="md">Descargar .md</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
       </div>
@@ -213,7 +213,7 @@ async function showResult(key, quiet) {
       el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
       el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
       el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
-        el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL y abre Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url), urlPrompt(r.url)) }, 'Claude'))),
+        el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL con las instrucciones para Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url)) }, 'Claude'))),
       openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '8' }, issueList(r.issues),
         el('button', { class: 'btn-outline close-issues', onclick: closeIssues }, 'Cerrar ▴'))) : null
     ].filter(Boolean))))
@@ -229,27 +229,15 @@ function view(r) {
 }
 $('#results').addEventListener('change', e => showResult(e.target.value));
 document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => { location.href = '/api/export/' + b.dataset.export + '/' + shownKey; }));
-// Descarga el resumen .md y abre claude.ai con la petición ya escrita
-const claudePrompt = host => `Te adjunto el resumen de una auditoría Lighthouse de ${host} (archivo .md descargado de mi herramienta). Actúa como consultor/a senior de SEO técnico y rendimiento web y, en español:
-1. Haz un diagnóstico general en 3-5 frases.
-2. Agrupa los problemas por causa común (plantilla, recurso compartido, servidor) e indica a qué URLs afectan.
-3. Propón un plan de acción priorizado por impacto y esfuerzo: qué hacer, quién (SEO o desarrollo) y cómo comprobarlo.
-4. Dime qué URLs revisar primero y por qué.
-Básate solo en los datos del archivo.`;
-const urlPrompt = url => `Te adjunto el informe Lighthouse de ${url} (archivo .md descargado de mi herramienta), con los problemas ordenados por impacto, qué hacer y dónde. Actúa como consultor/a senior de SEO técnico y rendimiento web y, en español:
-1. Explica en 2-3 frases el estado de la página.
-2. Para cada problema relevante, di exactamente qué cambiar, en qué recurso o elemento, quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.
-3. Ordena las tareas por impacto y esfuerzo, empezando por las victorias rápidas.
-Básate solo en los datos del archivo.`;
-function analyzeWithClaude(mdUrl, prompt) {
+// Descarga el .md, que ya incluye las instrucciones para Claude
+function analyzeWithClaude(mdUrl) {
   location.href = mdUrl;
-  window.open('https://claude.ai/new?q=' + encodeURIComponent(prompt), '_blank', 'noopener');
   const box = $('#analysis');
   box.hidden = false;
-  box.innerHTML = '<strong>Se ha descargado el informe (.md) y se ha abierto Claude en otra pestaña.</strong> Adjunta el archivo en la conversación (arrástralo o usa el clip) y envía el mensaje, que ya está escrito.';
+  box.innerHTML = '<strong>Se ha descargado el informe (.md) con las instrucciones para Claude.</strong> Arrástralo a una conversación en Claude y envíalo: no hace falta escribir nada más.';
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-$('#analyze').addEventListener('click', () => analyzeWithClaude('/api/export/md/' + shownKey, claudePrompt(shownKey.split('/')[0])));
+$('#analyze').addEventListener('click', () => analyzeWithClaude('/api/export/md/' + shownKey));
 // Cierra la lista de problemas y deja a la vista la fila de su URL
 function closeIssues() {
   if (!openIssues.size) return;

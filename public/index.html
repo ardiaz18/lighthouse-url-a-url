@@ -133,6 +133,7 @@ footer a{color:var(--ink)}
         <div style="display:grid;gap:1rem">
           <label>Solo estas rutas <small>Una por línea, relativas (p. ej. /blog/). Desactiva el rastreo de enlaces.</small><textarea id="urls"></textarea></label>
           <label>Excluir rutas <small>Una por línea; admite expresiones regulares.</small><textarea id="exclude"></textarea></label>
+          <label class="check"><input type="checkbox" id="all-urls"> Auditar todas las URLs, sin muestreo <small>— por defecto se analizan como máximo 8 URLs de cada tipo (p. ej. 8 entradas de /blog/). Más lento; el máximo sigue siendo 200 URLs.</small></label>
         </div>
       </details>
       <div><button class="btn" id="run">Iniciar auditoría</button></div>
@@ -152,6 +153,10 @@ footer a{color:var(--ink)}
       </div>
     </div>
     <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pulsa el número de «Problemas» para ver qué hacer y dónde.</p>
+    <div class="analysis" id="sample-note" hidden>
+      <strong>Auditoría con muestreo.</strong> De las URLs del mismo tipo se analizan como máximo 8, y aquí se ha llegado a ese máximo en <strong id="sample-groups"></strong>: es probable que haya más URLs de ese tipo sin auditar. Las que comparten plantilla suelen tener los mismos problemas, así que la muestra suele bastar.
+      <br><br>Para auditarlas todas, lanza otra auditoría marcando <strong>Opciones avanzadas → Auditar todas las URLs, sin muestreo</strong> (tardará más; el máximo sigue siendo 200 URLs).
+    </div>
     <div class="analysis" id="limit-note" hidden>
       <strong>Se ha alcanzado el límite de 200 URLs.</strong> En sitios grandes la herramienta no audita todas las páginas: se detiene en 200 y analiza como máximo 8 URLs de cada tipo (por ejemplo, 8 fichas de producto, 8 categorías…). Las páginas que comparten plantilla suelen tener los mismos problemas de Lighthouse, así que esta muestra cubre casi todo lo que hay que corregir. Auditar miles de URLs llevaría horas y repetiría los mismos resultados.
       <br><br>Si quieres revisar páginas concretas que no aparecen, lanza otra auditoría con <strong>Opciones avanzadas → Solo estas rutas</strong>. Ten en cuenta que algunas webs grandes bloquean o ralentizan las visitas automáticas, y eso puede empeorar las puntuaciones o hacer que fallen URLs.
@@ -181,7 +186,7 @@ const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad']
 const catLabel = Object.fromEntries(cats);
 const openIssues = new Set();
 const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
-let timer, shownKey, settings = {};
+let timer, shownKey, settings = {}, resultsMeta = [];
 const fieldLoading = new Set(), fieldError = {};
 
 function el(tag, attrs = {}, ...kids) {
@@ -223,7 +228,7 @@ async function toggleLog(id) {
   pre.hidden = !pre.hidden;
 }
 async function loadResults() {
-  const results = await json('/api/results'), sel = $('#results');
+  const results = resultsMeta = await json('/api/results'), sel = $('#results');
   sel.replaceChildren(...results.map(r => el('option', { value: r.key },
     r.host + ' · ' + (r.formFactor === 'desktop' ? 'escritorio' : 'móvil') + ' · ' + r.count + ' URLs · ' + new Date(r.updated).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }))));
   sel.hidden = !results.length;
@@ -240,6 +245,13 @@ async function showResult(key, quiet) {
   const current = $('#viewer iframe')?.dataset.src;
   // Unlighthouse audita como máximo 200 URLs (scanner.maxRoutes) y una muestra por plantilla
   $('#limit-note').hidden = reports.length < 200;
+  // muestreo: tipos de URL (primer tramo de la ruta) que han llegado al máximo de 8
+  const groups = {};
+  for (const r of reports) { const p = new URL(r.url).pathname.split('/').filter(Boolean); if (p.length > 1) groups[p[0]] = (groups[p[0]] || 0) + 1; }
+  const full = Object.keys(groups).filter(g => groups[g] >= 8);
+  const sampling = resultsMeta.find(m => m.key === key)?.sampling ?? full.length > 0;
+  $('#sample-note').hidden = !(sampling && full.length && reports.length < 200);
+  $('#sample-groups').textContent = full.map(g => `/${g}/`).join(', ');
   $('#reports').replaceChildren(...(reports.length ? [originNote(reports)].filter(Boolean) : []), reports.length ? el('table', {},
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
@@ -362,7 +374,7 @@ $('#form').addEventListener('submit', async e => {
   try {
     await json('/api/audits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
       site: $('#site').value, device: document.querySelector('[name=device]:checked').value,
-      javascript: $('#javascript').checked, urls: $('#urls').value, exclude: $('#exclude').value }) });
+      javascript: $('#javascript').checked, urls: $('#urls').value, exclude: $('#exclude').value, allUrls: $('#all-urls').checked }) });
     await loadAudits();
   } catch (err) { $('#msg').textContent = 'Error: ' + err.message; }
   finally { $('#run').disabled = false; }

@@ -2,7 +2,7 @@ import http from 'node:http';
 import { actions, metricSources } from './actions.mjs';
 import { createCrux } from './crux.mjs';
 import { fork } from 'node:child_process';
-import { readFile, readdir, stat } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname, relative, sep } from 'node:path';
 
@@ -42,13 +42,19 @@ function startAudit(input) {
   if (input.javascript) args.push('--enable-javascript');
   if (list(input.urls)) args.push('--urls', list(input.urls));
   if (list(input.exclude)) args.push('--exclude-urls', list(input.exclude));
+  if (input.allUrls) args.push('--disable-dynamic-sampling');
+  // con rutas manuales Unlighthouse no rastrea ni muestrea
+  const options = { sampling: !input.allUrls && !list(input.urls), manualUrls: !!list(input.urls) };
   const audit = { id: nextId++, site, device: input.device === 'desktop' ? 'desktop' : 'mobile', port: freePort(), status: 'starting', running: true, key: null, api: null, startedAt: Date.now(), log: [], error: null };
   const child = fork(runner, args, { cwd: root, env: { ...process.env, UNLIGHTHOUSE_PORT: String(audit.port), NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   const addLog = chunk => { audit.log.push(...String(chunk).replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/).filter(Boolean)); audit.log = audit.log.slice(-200); };
   child.stdout.on('data', addLog);
   child.stderr.on('data', addLog);
   child.on('message', msg => {
-    if (msg.type === 'ready') Object.assign(audit, { status: 'scanning', api: msg.api, site: msg.site || audit.site, key: toKey(msg.outputPath) });
+    if (msg.type === 'ready') {
+      Object.assign(audit, { status: 'scanning', api: msg.api, site: msg.site || audit.site, key: toKey(msg.outputPath) });
+      writeFile(join(msg.outputPath, 'audit-options.json'), JSON.stringify(options), 'utf-8').catch(() => {});
+    }
     if (msg.type === 'finished') Object.assign(audit, { status: 'finished', seconds: msg.seconds });
     if (msg.type === 'error') audit.error = msg.message;
   });
@@ -110,7 +116,8 @@ async function listResults() {
       const files = await findReports(join(dir, 'reports'));
       if (!files.length) continue;
       const first = await readReport(files[0]).catch(() => null);
-      results.push({ key: toKey(dir), host: host.name.replace('꞉', ':'), count: files.length, formFactor: first?.formFactor, updated: (await stat(dir)).mtimeMs });
+      const options = await readFile(join(dir, 'audit-options.json'), 'utf-8').then(JSON.parse).catch(() => ({}));
+      results.push({ key: toKey(dir), host: host.name.replace('꞉', ':'), count: files.length, formFactor: first?.formFactor, sampling: options.sampling, updated: (await stat(dir)).mtimeMs });
     }
   }
   return results.sort((a, b) => b.updated - a.updated);

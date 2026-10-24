@@ -2,3 +2,4 @@ node_modules/
 .unlighthouse/
 .env
 playwright-report/
+settings.json

@@ -5,6 +5,7 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 - Rastrea el sitio (sitemap, robots.txt y enlaces internos) y ejecuta Lighthouse en cada URL, en móvil o escritorio.
 - Muestra el **informe Lighthouse completo de cada URL**, en español.
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
+- Muestra los **datos de usuarios reales** (Core Web Vitals de CrUX, los mismos de PageSpeed Insights) junto a los de laboratorio, con una clave gratuita de Google.
 - **Analizar con Claude**: descarga un .md con los datos y las instrucciones de análisis ya escritas; basta con soltarlo en una conversación de Claude.
 - Detalla cada problema: qué hacer, por qué y dónde (recursos o elementos concretos).
 - Analizar con Claude también para cada URL, y exportación en CSV para hojas de cálculo.
@@ -39,6 +40,20 @@ Usa tu suscripción de Claude, sin coste de API:
 2. Arrastra el archivo a una conversación en claude.ai y envíalo.
 
 Para hojas de cálculo usa **Descargar CSV**. Con Claude Code, abre la carpeta del proyecto y pide «analiza la última auditoría»: `CLAUDE.md` le indica dónde están los informes.
+
+## Datos de usuarios reales (CrUX)
+
+La columna **Usuarios reales** muestra LCP, INP y CLS de visitantes reales de Chrome (percentil 75, últimos 28 días): son los datos de «Descubre lo que experimentan tus usuarios reales» de PageSpeed Insights. Si una URL no tiene tráfico suficiente se muestran los del dominio, marcados como tales.
+
+Necesita una clave gratuita de Google Cloud (sin tarjeta). Cada persona usa la suya:
+
+1. Entra en https://console.cloud.google.com y crea un proyecto.
+2. En **APIs y servicios → Biblioteca**, busca **Chrome UX Report API** y pulsa **Habilitar**.
+3. En **APIs y servicios → Credenciales**, pulsa **Crear credenciales → Clave de API**.
+4. Edita la clave y, en **Restricciones de API**, limítala a **Chrome UX Report API**.
+5. En la herramienta, pulsa el icono de **Ajustes** (⚙), pega la clave y guarda.
+
+La clave se guarda solo en tu equipo (`settings.json`, que no se sube a git). En un servidor, usa la variable de entorno `CRUX_API_KEY`. Los datos se consultan una vez por auditoría y se guardan con ella. El límite gratuito es de 150 consultas por minuto.
 
 ## Limitaciones
 

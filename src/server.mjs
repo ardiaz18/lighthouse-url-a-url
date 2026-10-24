@@ -1,5 +1,6 @@
 import http from 'node:http';
 import { actions, metricSources } from './actions.mjs';
+import { createCrux } from './crux.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -14,6 +15,8 @@ const maxRunning = 2;
 const maxBytes = 12_000;
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'application/javascript', '.png': 'image/png', '.svg': 'image/svg+xml', '.jpeg': 'image/jpeg', '.json': 'application/json' };
 
+const crux = createCrux(root);
+const collecting = new Map();
 const audits = new Map();
 let nextId = 1;
 
@@ -112,19 +115,44 @@ async function listResults() {
   }
   return results.sort((a, b) => b.updated - a.updated);
 }
-async function resultReports(key) {
+function auditDir(key) {
   const dir = normalize(join(outputDir, key));
   if (!dir.startsWith(outputDir + sep)) throw Error('Ruta no válida');
-  const reports = await Promise.all((await findReports(join(dir, 'reports'))).map(f => readReport(f).catch(() => null)));
-  return reports.filter(Boolean).sort((a, b) => b.severity - a.severity || a.url.localeCompare(b.url));
+  return dir;
+}
+async function resultReports(key) {
+  const dir = auditDir(key);
+  const reports = (await Promise.all((await findReports(join(dir, 'reports'))).map(f => readReport(f).catch(e => { console.error('No se pudo leer', f, e.message); return null; })))).filter(Boolean);
+  // datos de usuarios reales: field queda undefined si aún no se han consultado y null si Google no tiene datos
+  const field = await crux.cached(dir);
+  const merged = reports.map(r => {
+    if (!field || !(r.url in field)) return r;
+    const f = field[r.url];
+    return { ...r, field: f, ...priority(r.scores, f) };
+  });
+  return merged.sort((a, b) => b.severity - a.severity || a.url.localeCompare(b.url));
+}
+async function collectField(key) {
+  // una sola consulta en curso por auditoría
+  if (!collecting.has(key)) {
+    const job = (async () => {
+      const reports = await resultReports(key);
+      await crux.collect(auditDir(key), reports.map(r => r.url), reports[0]?.formFactor);
+    })().finally(() => collecting.delete(key));
+    collecting.set(key, job);
+  }
+  return collecting.get(key);
 }
 
 // Gravedad: pérdida de puntuación ponderada (más peso a rendimiento y SEO)
 const weights = { performance: 0.4, seo: 0.3, accessibility: 0.2, 'best-practices': 0.1 };
-function priority(scores) {
+// Si hay datos reales de la propia URL, las Core Web Vitals suspendidas suben la gravedad
+function priority(scores, field) {
   const values = Object.values(scores).filter(v => v != null);
-  const severity = Math.round(Object.entries(weights).reduce((t, [id, w]) => t + w * (100 - (scores[id] ?? 100)), 0));
-  const level = values.some(v => v < 50) || severity >= 25 ? 'alta' : values.some(v => v < 90) ? 'media' : 'baja';
+  const vitals = field?.scope === 'url' ? ['lcp', 'inp', 'cls'].map(id => field.metrics[id]?.rating).filter(Boolean) : [];
+  const severity = Math.round(Object.entries(weights).reduce((t, [id, w]) => t + w * (100 - (scores[id] ?? 100)), 0)
+    + vitals.reduce((t, r) => t + (r === 'poor' ? 10 : r === 'needs' ? 4 : 0), 0));
+  const level = values.some(v => v < 50) || vitals.includes('poor') || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
   return { severity, level };
 }
 // Auditorías suspendidas con qué hacer, por qué y dónde (recursos o elementos
@@ -148,7 +176,9 @@ function rows(details) {
   if (details.type === 'list') return details.items.flatMap(i => i.type === 'node' ? [{ node: i }] : rows(i));
   if (details.type === 'list-section') return rows(details.value);
   if (details.type === 'network-tree') return [{ chain: longestChain(details.chains) }];
-  return details.items || [];
+  // las listas de comprobación traen un objeto: interesan las que no se cumplen
+  if (details.type === 'checklist') return Object.values(details.items || {}).filter(c => c && c.value === false).map(c => ({ label: `No cumple: ${c.label}` }));
+  return Array.isArray(details.items) ? details.items : [];
 }
 function longestChain(chains, path = []) {
   const next = Object.values(chains || {}).find(c => c.isLongest) || Object.values(chains || {})[0];
@@ -225,7 +255,7 @@ async function exportMarkdown(key) {
     '## URLs por prioridad', ''
   ];
   for (const r of reports) {
-    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), '');
+    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field), '');
     lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
@@ -236,9 +266,19 @@ function claudeBrief(tasks) {
     '## Instrucciones para Claude', '',
     'Actúa como consultor/a senior de SEO técnico y rendimiento web. Este archivo contiene datos de Google Lighthouse exportados por la herramienta «Lighthouse completo URL a URL». Analízalos y responde en español:', '',
     ...tasks.map((t, n) => `${n + 1}. ${t}`), '',
-    'Básate solo en los datos de este archivo; si algo requiere comprobarse en la web, dilo. «Qué hacer» y «Dónde» son pistas de la herramienta: concrétalas para este caso.', '',
+    'Básate solo en los datos de este archivo; si algo requiere comprobarse en la web, dilo. «Qué hacer» y «Dónde» son pistas de la herramienta: concrétalas para este caso.',
+    'Las puntuaciones de Lighthouse son de laboratorio (una carga simulada). Cuando haya datos de «Usuarios reales» (CrUX), dales prioridad: son las Core Web Vitals que Google usa como señal, y contrástalos con el laboratorio para explicar diferencias.', '',
     '---', ''
   ];
+}
+const ratingNames = { good: 'bueno', needs: 'mejorable', poor: 'malo' };
+const fieldFormat = { lcp: v => `${(v / 1000).toFixed(1).replace('.', ',')} s`, inp: v => `${Math.round(v)} ms`, cls: v => v.toFixed(2).replace('.', ','), fcp: v => `${(v / 1000).toFixed(1).replace('.', ',')} s`, ttfb: v => `${(v / 1000).toFixed(1).replace('.', ',')} s` };
+const fieldNames = { lcp: 'LCP', inp: 'INP', cls: 'CLS', fcp: 'FCP', ttfb: 'TTFB' };
+function fieldLine(f) {
+  if (f === undefined) return [];
+  if (!f) return ['- Usuarios reales (CrUX): Google no tiene datos suficientes de esta URL ni del dominio.'];
+  const values = Object.entries(f.metrics).map(([id, m]) => `${fieldNames[id]} ${fieldFormat[id](m.p75)} (${ratingNames[m.rating]})`).join(' · ');
+  return [`- Usuarios reales (CrUX, percentil 75, 28 días${f.scope === 'origin' ? ', datos de todo el dominio: esta URL no tiene tráfico suficiente' : ''}): ${values}`];
 }
 function issueLines(list, maxWhere) {
   return list.flatMap(i => [
@@ -256,7 +296,8 @@ async function exportUrlMarkdown(key, url) {
     `- Fecha: ${r.fetchTime ? new Date(r.fetchTime).toLocaleString('es-ES') : '—'}`,
     `- Dispositivo: ${r.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
     `- Prioridad: ${levelNames[r.level]} (gravedad ${r.severity})`,
-    `- Puntuaciones: ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), '',
+    `- Puntuaciones: ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '),
+    ...fieldLine(r.field), '',
     ...claudeBrief([
       'Explica en 2-3 frases el estado de la página.',
       'Para cada problema relevante, di exactamente qué cambiar, en qué recurso o elemento (usa los datos de «Dónde»), quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.',
@@ -268,8 +309,12 @@ async function exportUrlMarkdown(key, url) {
 }
 async function exportCsv(key) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(catNames), 'Problemas', 'Principales problemas']];
-  for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(catNames).map(id => r.scores[id]), r.issues.length, r.issues.slice(0, 5).map(i => i.title).join(' | ')]);
+  const vitals = ['lcp', 'inp', 'cls'];
+  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(catNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Problemas', 'Principales problemas']];
+  for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(catNames).map(id => r.scores[id]),
+    ...vitals.map(id => r.field?.metrics[id] ? `${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})` : ''),
+    r.field ? (r.field.scope === 'url' ? 'URL' : 'Dominio') : r.field === null ? 'Sin datos' : '',
+    r.issues.length, r.issues.slice(0, 5).map(i => i.title).join(' | ')]);
   return '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
 }
 
@@ -315,6 +360,9 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
+    if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
+    if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status() });
+    if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status() }); }
     const m = path.match(/^\/api\/audits\/(\d+)(\/stop|\/log)$/);
     const audit = m && audits.get(Number(m[1]));
     if (audit && req.method === 'GET' && m[2] === '/log') return send(200, audit.log);

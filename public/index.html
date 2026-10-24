@@ -82,6 +82,16 @@ ol.issues .cat{font-family:var(--f-j);font-size:.68rem;font-weight:700;text-tran
 ol.issues .val{color:var(--ink-3)}
 ol.issues .why{color:var(--ink-3)}
 .close-issues{margin-top:1rem;position:sticky;left:1.25rem}
+.nav-icons button{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);background:var(--white);cursor:pointer;padding:0}
+.nav-icons button:hover{border-color:var(--ink);color:var(--coral-h)}
+dialog{border:1px solid var(--rule);border-radius:16px;padding:1.5rem;max-width:min(32rem,calc(100vw - 2rem));color:var(--ink-2);font-family:var(--f-q)}
+dialog::backdrop{background:rgba(13,13,13,.35)}
+dialog h3{font-family:var(--f-j);font-size:.95rem;color:var(--ink);margin:1rem 0 .3rem}
+dialog label{margin-top:.8rem}
+dialog input{width:100%;font:inherit;padding:.7rem .9rem;border:1.5px solid var(--rule);border-radius:12px}
+dialog input:focus{outline:none;border-color:var(--coral)}
+.vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:13rem}
+.vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
 pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{color:var(--ink-3);font-size:.95rem}
@@ -92,6 +102,7 @@ footer a{color:var(--ink)}
 <body>
 <nav><div class="wrap nav-inner"><a class="nav-logo" href="/">Lighthouse completo URL a URL</a>
   <div class="nav-icons">
+    <button type="button" id="open-settings" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
     <a href="https://github.com/ardiaz18" target="_blank" rel="noopener" aria-label="Mi perfil de GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
     <a href="https://aliciaruiz.es/blog/" target="_blank" rel="noopener" aria-label="Mi blog" title="Blog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></a>
   </div></div></nav>
@@ -145,6 +156,18 @@ footer a{color:var(--ink)}
     <div id="viewer"></div>
   </section>
 </main>
+<dialog id="settings" aria-labelledby="settings-title">
+  <h2 id="settings-title">Ajustes</h2>
+  <h3>Datos de usuarios reales (CrUX)</h3>
+  <p class="meta">Muestra las Core Web Vitals (LCP, INP y CLS) de visitantes reales de Chrome en los últimos 28 días, los mismos datos de PageSpeed Insights. Necesita una clave gratuita de Google Cloud: <a href="https://github.com/ardiaz18/lighthouse-url-a-url#datos-de-usuarios-reales-crux" target="_blank" rel="noopener">cómo conseguirla</a>. Se guarda solo en este equipo.</p>
+  <label>Clave de la API de CrUX<input type="password" id="crux-key" autocomplete="off" spellcheck="false" placeholder="AIza…"></label>
+  <p class="msg" id="crux-status" role="status"></p>
+  <div class="actions">
+    <button class="btn" id="crux-save">Guardar</button>
+    <button class="btn-outline" id="crux-remove" hidden>Quitar clave</button>
+    <button class="btn-outline" onclick="this.closest('dialog').close()">Cerrar</button>
+  </div>
+</dialog>
 <footer><div class="wrap">Motor de auditoría: <a href="https://github.com/harlan-zw/unlighthouse" target="_blank" rel="noopener">Unlighthouse</a> (MIT, © Harlan Wilton y colaboradores) y Google Lighthouse, sin modificar. Herramienta local: no exponer públicamente.</div></footer>
 <script>
 const $ = s => document.querySelector(s);
@@ -153,7 +176,8 @@ const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad']
 const catLabel = Object.fromEntries(cats);
 const openIssues = new Set();
 const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
-let timer, shownKey;
+let timer, shownKey, settings = {};
+const fieldLoading = new Set(), fieldError = {};
 
 function el(tag, attrs = {}, ...kids) {
   const e = document.createElement(tag);
@@ -212,19 +236,65 @@ async function showResult(key, quiet) {
   // Unlighthouse audita como máximo 200 URLs (scanner.maxRoutes) y una muestra por plantilla
   $('#limit-note').hidden = reports.length < 200;
   $('#reports').replaceChildren(reports.length ? el('table', {},
-    el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])), el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
+    el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
+      el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
+        settings.crux?.enabled ? null : el('button', { class: 'btn-link', onclick: openSettings }, 'Activar')),
+      el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
     el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },
       el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),
       el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
+      el('td', {}, fieldCell(r)),
       el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
       el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
         el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL con las instrucciones para Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url)) }, 'Claude'))),
-      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '8' }, issueList(r.issues),
+      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: '9' }, issueList(r.issues),
         el('button', { class: 'btn-outline close-issues', onclick: closeIssues }, 'Cerrar ▴'))) : null
     ].filter(Boolean))))
     : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
   if (!quiet) $('#reports').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // consulta CrUX para las URLs que aún no lo tengan (se guarda con la auditoría)
+  if (settings.crux?.enabled && !fieldLoading.has(key) && !fieldError[key] && reports.some(r => r.field === undefined)) {
+    fieldLoading.add(key);
+    fetch('/api/field/' + key, { method: 'POST' }).then(async res => { if (!res.ok) fieldError[key] = (await res.json()).error; })
+      .catch(err => { fieldError[key] = err.message; })
+      .finally(() => { fieldLoading.delete(key); if (shownKey === key) showResult(key, true); });
+  }
 }
+// Usuarios reales: LCP, INP y CLS en verde/ámbar/rojo según los umbrales de Google
+const fieldFmt = { lcp: v => (v / 1000).toFixed(1).replace('.', ',') + ' s', inp: v => Math.round(v) + ' ms', cls: v => v.toFixed(2).replace('.', ',') };
+const ratingClass = { good: 's-good', needs: 's-avg', poor: 's-bad' };
+const ratingText = { good: 'bueno', needs: 'mejorable', poor: 'malo' };
+function fieldCell(r) {
+  if (!settings.crux?.enabled) return el('span', { class: 'meta' }, '—');
+  if (r.field === undefined) return el('span', { class: 'meta', title: fieldError[shownKey] || '' }, fieldError[shownKey] ? 'Error ⓘ' : 'Consultando…');
+  if (!r.field) return el('span', { class: 'meta', title: 'Google no tiene datos suficientes de esta URL ni del dominio' }, 'Sin datos');
+  return el('div', { class: 'vitals' },
+    ...['lcp', 'inp', 'cls'].filter(id => r.field.metrics[id]).map(id => {
+      const m = r.field.metrics[id];
+      return el('span', { class: 'score ' + ratingClass[m.rating], title: `${id.toUpperCase()} real: ${ratingText[m.rating]}` }, `${id.toUpperCase()} ${fieldFmt[id](m.p75)}`);
+    }),
+    r.field.scope === 'origin' ? el('span', { class: 'meta', title: 'Esta URL no tiene tráfico suficiente; se muestran los datos de todo el dominio' }, 'dominio') : null);
+}
+// Ajustes: clave de CrUX guardada solo en este equipo
+async function loadSettings() { settings = await json('/api/settings'); }
+function openSettings() {
+  $('#crux-status').textContent = settings.crux?.enabled ? 'Datos de usuarios reales activados.' : 'Sin clave: la columna «Usuarios reales» no muestra datos.';
+  $('#crux-key').value = '';
+  $('#crux-remove').hidden = !settings.crux?.enabled || settings.crux.fromEnv;
+  $('#settings').showModal();
+}
+async function saveKey(value) {
+  $('#crux-status').textContent = value ? 'Comprobando la clave…' : 'Quitando la clave…';
+  try {
+    settings = await json('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cruxApiKey: value }) });
+    $('#settings').close();
+    for (const k in fieldError) delete fieldError[k];
+    if (shownKey) showResult(shownKey, true);
+  } catch (err) { $('#crux-status').textContent = 'Error: ' + err.message; }
+}
+$('#open-settings').addEventListener('click', openSettings);
+$('#crux-save').addEventListener('click', () => saveKey($('#crux-key').value.trim()));
+$('#crux-remove').addEventListener('click', () => saveKey(''));
 function view(r) {
   const frame = el('iframe', { src: r.report, title: 'Informe Lighthouse de ' + r.url });
   frame.dataset.src = r.report;
@@ -278,7 +348,7 @@ $('#form').addEventListener('submit', async e => {
   } catch (err) { $('#msg').textContent = 'Error: ' + err.message; }
   finally { $('#run').disabled = false; }
 });
-loadAudits();
+loadSettings().catch(() => {}).finally(loadAudits);
 </script>
 </body>
 </html>

@@ -3,7 +3,8 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
-const endpoint = 'https://chromeuxreport.googleapis.com/v1/records:queryRecord';
+const version = 2;
+const endpoint ='https://chromeuxreport.googleapis.com/v1/records:queryRecord';
 // Umbrales oficiales de Google: bueno hasta el primero, malo desde el segundo
 const metrics = {
   lcp: { api: 'largest_contentful_paint', good: 2500, poor: 4000 },
@@ -63,23 +64,29 @@ export function createCrux(root) {
       const key = await apiKey();
       if (!key) throw Error('Añade tu clave de CrUX en Ajustes para ver datos de usuarios reales.');
       const file = join(dir, 'crux.json');
-      const cache = await readFile(file, 'utf-8').then(JSON.parse).catch(() => ({ data: {} }));
+      const cache = await this.cached(dir).then(data => ({ data: data || {} }));
       const device = formFactor === 'desktop' ? 'DESKTOP' : 'PHONE';
       const origins = {};
       for (const url of urls.filter(u => !(u in cache.data))) {
-        let field = summarize(await query(key, { url, formFactor: device }), 'url');
+        // URL en el mismo dispositivo → URL sumando todos los dispositivos → dominio
+        let field = summarize(await query(key, { url, formFactor: device }), 'url')
+          || summarize(await query(key, { url }), 'url-all');
         if (!field) {
           const origin = new URL(url).origin;
           origins[origin] ??= summarize(await query(key, { origin, formFactor: device }), 'origin');
           field = origins[origin];
         }
         cache.data[url] = field || null;
-        await writeFile(file, JSON.stringify({ fetchedAt: new Date().toISOString(), formFactor: device, data: cache.data }), 'utf-8');
+        await writeFile(file, JSON.stringify({ version, fetchedAt: new Date().toISOString(), formFactor: device, data: cache.data }), 'utf-8');
       }
       return cache.data;
     },
     async cached(dir) {
-      return (await readFile(join(dir, 'crux.json'), 'utf-8').then(JSON.parse).catch(() => null))?.data || null;
+      const cache = await readFile(join(dir, 'crux.json'), 'utf-8').then(JSON.parse).catch(() => null);
+      if (!cache?.data) return null;
+      // versiones anteriores no probaban «todos los dispositivos»: esas URLs se vuelven a consultar
+      if (cache.version !== version) for (const [url, f] of Object.entries(cache.data)) if (!f || f.scope === 'origin') delete cache.data[url];
+      return cache.data;
     }
   };
 }

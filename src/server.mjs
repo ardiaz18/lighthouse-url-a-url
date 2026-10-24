@@ -149,7 +149,7 @@ const weights = { performance: 0.4, seo: 0.3, accessibility: 0.2, 'best-practice
 // Si hay datos reales de la propia URL, las Core Web Vitals suspendidas suben la gravedad
 function priority(scores, field) {
   const values = Object.values(scores).filter(v => v != null);
-  const vitals = field?.scope === 'url' ? ['lcp', 'inp', 'cls'].map(id => field.metrics[id]?.rating).filter(Boolean) : [];
+  const vitals = field && field.scope !== 'origin' ?['lcp', 'inp', 'cls'].map(id => field.metrics[id]?.rating).filter(Boolean) : [];
   const severity = Math.round(Object.entries(weights).reduce((t, [id, w]) => t + w * (100 - (scores[id] ?? 100)), 0)
     + vitals.reduce((t, r) => t + (r === 'poor' ? 10 : r === 'needs' ? 4 : 0), 0));
   const level = values.some(v => v < 50) || vitals.includes('poor') || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
@@ -281,7 +281,9 @@ function fieldLine(f, originShownAbove) {
   if (!f) return ['- Usuarios reales (CrUX): Google no tiene datos suficientes de esta URL ni del dominio.'];
   if (f.scope === 'origin' && originShownAbove) return ['- Usuarios reales (CrUX): sin datos propios por falta de tráfico; ver el dato del dominio al principio.'];
   const values = Object.entries(f.metrics).map(([id, m]) => `${fieldNames[id]} ${fieldFormat[id](m.p75)} (${ratingNames[m.rating]})`).join(' · ');
-  return [`- Usuarios reales (CrUX, percentil 75, 28 días${f.scope === 'origin' ? ', datos de todo el dominio: esta URL no tiene tráfico suficiente' : ''}): ${values}`];
+  const scope = f.scope === 'origin' ? ', datos de todo el dominio: esta URL no tiene tráfico suficiente'
+    : f.scope === 'url-all' ? ', móvil y escritorio juntos: por separado no hay tráfico suficiente' : '';
+  return [`- Usuarios reales (CrUX, percentil 75, 28 días${scope}): ${values}`];
 }
 function issueLines(list, maxWhere) {
   return list.flatMap(i => [
@@ -316,7 +318,7 @@ async function exportCsv(key) {
   const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(catNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Problemas', 'Principales problemas']];
   for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(catNames).map(id => r.scores[id]),
     ...vitals.map(id => r.field?.metrics[id] ? `${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})` : ''),
-    r.field ? (r.field.scope === 'url' ? 'URL' : 'Dominio') : r.field === null ? 'Sin datos' : '',
+    r.field ? ({ url: 'URL', 'url-all': 'URL (móvil + escritorio)', origin: 'Dominio' }[r.field.scope]) : r.field === null ? 'Sin datos' : '',
     r.issues.length, r.issues.slice(0, 5).map(i => i.title).join(' | ')]);
   return '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
 }

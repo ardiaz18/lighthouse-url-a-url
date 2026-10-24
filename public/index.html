@@ -64,7 +64,10 @@ select{font:inherit;font-size:.95rem;padding:.6rem .9rem;border:1.5px solid var(
 table{width:100%;border-collapse:collapse;font-size:.9rem}
 th{font-family:var(--f-j);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);text-align:left;padding:.5rem;border-bottom:1px solid var(--rule)}
 td{padding:.55rem .5rem;border-bottom:1px solid var(--rule);vertical-align:middle}
-td.url{overflow-wrap:anywhere;min-width:14rem}
+td.url{overflow-wrap:anywhere;min-width:12rem}
+/* la tabla de informes usa casi todo el ancho de la pantalla en escritorio */
+.card.wide{width:min(1800px,calc(100vw - 3rem));margin-left:50%;transform:translateX(-50%)}
+@media(max-width:900px){.card.wide{width:auto;margin-left:0;transform:none}}
 tr.sel td{background:var(--coral-bg)}
 .score{display:inline-block;min-width:2.4rem;text-align:center;font-family:var(--f-j);font-weight:800;font-size:.82rem;border-radius:100px;padding:.1rem .4rem}
 .s-good{background:#E6F4EA;color:#137333}.s-avg{background:#FEF7E0;color:#B06000}.s-bad{background:#FCE8E6;color:#C5221F}
@@ -92,7 +95,7 @@ dialog input{width:100%;font:inherit;padding:.7rem .9rem;border:1.5px solid var(
 dialog input:focus{outline:none;border-color:var(--coral)}
 .origin-note{position:sticky;left:0;border:1px solid var(--rule);border-radius:12px;padding:.8rem 1rem;margin-bottom:.8rem;background:var(--bg);font-size:.9rem;display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center}
 .origin-note .meta{flex-basis:100%;margin:0}
-.vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:13rem}
+.vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:9rem}
 .vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
 pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
@@ -140,7 +143,7 @@ footer a{color:var(--ink)}
     <h2>En curso</h2>
     <div class="audits" id="audits"></div>
   </section>
-  <section class="card">
+  <section class="card wide">
     <h2>Informes Lighthouse</h2>
     <div class="row" style="margin-top:1rem"><select id="results" aria-label="Auditoría guardada"></select>
       <div class="actions" id="exports" hidden>
@@ -272,6 +275,7 @@ function fieldCell(r) {
   if (!r.field) return el('span', { class: 'meta', title: 'Google no tiene datos suficientes de esta URL ni del dominio' }, 'Sin datos');
   // sin tráfico propio: el dato del dominio se muestra una sola vez, encima de la tabla
   if (r.field.scope === 'origin') return el('span', { class: 'meta', title: 'Esta URL no tiene tráfico suficiente para que Google publique sus datos; mira el dato del dominio encima de la tabla' }, 'Solo dominio');
+  if (r.field.scope === 'url-all') return el('div', { class: 'vitals', title: 'Por separado no hay tráfico suficiente: datos de esta URL sumando móvil y escritorio' }, vitalChips(r.field), el('span', { class: 'meta' }, 'móvil + escritorio'));
   return vitalChips(r.field);
 }
 function vitalChips(field) {
@@ -283,7 +287,7 @@ function vitalChips(field) {
 function originNote(reports) {
   const origin = reports.find(r => r.field?.scope === 'origin')?.field;
   if (!settings.crux?.enabled || !origin) return null;
-  const own = reports.filter(r => r.field?.scope === 'url').length;
+  const own = reports.filter(r => r.field && r.field.scope !== 'origin').length;
   return el('div', { class: 'origin-note' },
     el('span', {}, el('strong', {}, 'Usuarios reales del dominio'), ' (CrUX, percentil 75, últimos 28 días): '), vitalChips(origin),
     el('p', { class: 'meta' }, own

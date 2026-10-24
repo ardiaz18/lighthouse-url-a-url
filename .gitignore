@@ -1,0 +1,4 @@
+node_modules/
+.unlighthouse/
+.env
+playwright-report/

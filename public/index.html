@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lighthouse completo URL a URL</title>
+<link rel="icon" href="/assets/favicon.png">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Questrial&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap">
+<style>
+:root{--bg:#F8F7F5;--white:#fff;--ink:#0D0D0D;--ink-2:#3D3D3D;--ink-3:#5C5C5C;--rule:#E8E8E8;--coral:#FF5C35;--coral-h:#E8451F;--coral-bg:#FFF1EE;--ok:#1E8E3E;--f-j:'Plus Jakarta Sans',sans-serif;--f-q:'Questrial',sans-serif;--max:1140px}
+*{box-sizing:border-box;margin:0}
+body{background:var(--white);color:var(--ink-2);font-family:var(--f-q);line-height:1.65;-webkit-font-smoothing:antialiased}
+.wrap{max-width:var(--max);margin:0 auto;padding:0 clamp(1.25rem,5vw,2.5rem)}
+nav{border-bottom:1px solid var(--rule);background:rgba(255,255,255,.94);position:sticky;top:0;z-index:5}
+.nav-inner{display:flex;align-items:center;justify-content:space-between;height:60px}
+.nav-logo{display:flex;align-items:center;gap:.55rem;font-family:var(--f-j);font-weight:800;font-size:1.05rem;color:var(--ink);text-decoration:none;letter-spacing:-.02em}
+.nav-logo::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--coral);flex-shrink:0}
+.nav-icons{display:flex;gap:.4rem}
+.nav-icons a{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);transition:border-color .15s,color .15s}
+.nav-icons a:hover{border-color:var(--ink);color:var(--coral-h)}
+.nav-icons svg{width:18px;height:18px}
+@media(max-width:480px){.nav-logo{font-size:.88rem}.nav-icons a{width:34px;height:34px}}
+.hero{padding:clamp(2rem,4vw,3rem) 0 2rem;border-bottom:1px solid var(--rule);background:var(--bg)}
+.eyebrow{display:inline-flex;align-items:center;gap:.5rem;font-family:var(--f-j);font-size:.75rem;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--coral-h)}
+.eyebrow::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--coral)}
+h2{font-family:var(--f-j);font-size:1.25rem;font-weight:800;color:var(--ink);letter-spacing:-.02em}
+.sub{font-size:1.05rem;color:var(--ink-3);max-width:70ch;margin-top:.8rem}
+.sub+.sub{margin-top:.6rem}
+.card{background:var(--white);border:1px solid var(--rule);border-radius:16px;padding:clamp(1.25rem,3vw,2rem);margin-top:2rem}
+form{display:grid;gap:1rem;margin-top:1rem}
+label{font-family:var(--f-j);font-size:.82rem;font-weight:700;color:var(--ink);display:grid;gap:.35rem}
+label small{font-family:var(--f-q);font-weight:400;color:var(--ink-3)}
+input[type=url],textarea{width:100%;font:inherit;font-size:1rem;padding:.8rem 1rem;border:1.5px solid var(--rule);border-radius:12px;background:var(--white);color:var(--ink)}
+textarea{min-height:5.5rem;resize:vertical;font-size:.9rem}
+input:focus,textarea:focus{outline:none;border-color:var(--coral)}
+.row{display:flex;flex-wrap:wrap;gap:1.5rem;align-items:center}
+.seg{display:inline-flex;border:1.5px solid var(--rule);border-radius:100px;padding:3px}
+.seg input{position:absolute;opacity:0}
+.seg label{display:block;padding:.35rem 1rem;border-radius:100px;cursor:pointer;color:var(--ink-3)}
+.seg input:checked+label{background:var(--ink);color:var(--white)}
+.check{display:flex;align-items:center;gap:.5rem;font-family:var(--f-q);font-weight:400;color:var(--ink-2)}
+details summary{cursor:pointer;font-family:var(--f-j);font-weight:700;font-size:.85rem;color:var(--ink)}
+details[open] summary{margin-bottom:1rem}
+.btn{font-family:var(--f-j);font-weight:700;font-size:.92rem;background:var(--coral);color:var(--white);padding:.8rem 1.8rem;border:0;border-radius:100px;cursor:pointer;box-shadow:0 4px 14px rgba(255,92,53,.25);text-decoration:none;display:inline-block;transition:background .15s}
+.btn:hover{background:var(--coral-h)}
+.btn:disabled{opacity:.5;cursor:wait}
+.btn-outline{font-family:var(--f-j);font-weight:600;font-size:.85rem;color:var(--ink);background:var(--white);border:1.5px solid var(--rule);padding:.5rem 1.1rem;border-radius:100px;cursor:pointer;text-decoration:none}
+.btn-outline:hover{border-color:var(--ink)}
+.msg{font-size:.9rem;color:var(--coral-h);min-height:1.4em}
+.audits{display:grid;gap:1rem;margin-top:1rem}
+.audit{border:1px solid var(--rule);border-radius:14px;padding:1.1rem 1.25rem;display:grid;gap:.7rem}
+.audit-head{display:flex;flex-wrap:wrap;gap:.6rem 1rem;align-items:center;justify-content:space-between}
+.audit-site{font-family:var(--f-j);font-weight:700;color:var(--ink);overflow-wrap:anywhere}
+.tag{font-family:var(--f-j);font-size:.7rem;font-weight:700;border-radius:100px;padding:.15rem .6rem;background:#EDEDED;color:var(--ink)}
+.tag.scanning,.tag.starting{background:var(--coral-bg);color:var(--coral-h)}
+.tag.finished{background:#E6F4EA;color:var(--ok)}
+.tag.failed{background:#FCE8E6;color:#C5221F}
+.bar{height:6px;background:#EDEDED;border-radius:6px;overflow:hidden}
+.bar i{display:block;height:100%;background:var(--coral);transition:width .4s}
+.meta{font-size:.85rem;color:var(--ink-3)}
+.actions{display:flex;flex-wrap:wrap;gap:.5rem}
+iframe{width:100%;height:85vh;border:1px solid var(--rule);border-radius:12px;margin-top:1rem}
+select{font:inherit;font-size:.95rem;padding:.6rem .9rem;border:1.5px solid var(--rule);border-radius:12px;background:var(--white);color:var(--ink);max-width:100%}
+.table{overflow-x:auto;margin-top:1rem}
+table{width:100%;border-collapse:collapse;font-size:.9rem}
+th{font-family:var(--f-j);font-size:.72rem;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--ink-3);text-align:left;padding:.5rem;border-bottom:1px solid var(--rule)}
+td{padding:.55rem .5rem;border-bottom:1px solid var(--rule);vertical-align:middle}
+td.url{overflow-wrap:anywhere;min-width:14rem}
+tr.sel td{background:var(--coral-bg)}
+.score{display:inline-block;min-width:2.4rem;text-align:center;font-family:var(--f-j);font-weight:800;font-size:.82rem;border-radius:100px;padding:.1rem .4rem}
+.s-good{background:#E6F4EA;color:#137333}.s-avg{background:#FEF7E0;color:#B06000}.s-bad{background:#FCE8E6;color:#C5221F}
+.btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
+pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
+.empty{color:var(--ink-3);font-size:.95rem}
+footer{border-top:1px solid var(--rule);margin-top:3rem;padding:1.5rem 0;font-size:.82rem;color:var(--ink-3)}
+footer a{color:var(--ink)}
+</style>
+</head>
+<body>
+<nav><div class="wrap nav-inner"><a class="nav-logo" href="/">Lighthouse completo URL a URL</a>
+  <div class="nav-icons">
+    <a href="https://github.com/ardiaz18" target="_blank" rel="noopener" aria-label="Mi perfil de GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+    <a href="https://aliciaruiz.es/blog/" target="_blank" rel="noopener" aria-label="Mi blog" title="Blog"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20M12 2a15 15 0 0 0 0 20"/></svg></a>
+  </div></div></nav>
+<header class="hero"><div class="wrap">
+  <div class="eyebrow">Cómo funciona</div>
+  <p class="sub">Introduce la URL de un sitio y elige móvil o escritorio. La herramienta rastrea sus páginas (sitemap, robots.txt y enlaces internos) y ejecuta Google Lighthouse en cada URL con el motor Unlighthouse, sin alterar sus resultados.</p>
+  <p class="sub">Al terminar tendrás el informe Lighthouse completo de cada página, ordenado por prioridad, para abrirlo aquí, descargarlo o pasárselo a Claude para que lo interprete.</p>
+</div></header>
+<main class="wrap">
+  <section class="card">
+    <h2>Nueva auditoría</h2>
+    <form id="form">
+      <label>URL del sitio<input id="site" type="url" required placeholder="https://ejemplo.com/"></label>
+      <div class="row">
+        <div class="seg" role="radiogroup" aria-label="Dispositivo">
+          <input type="radio" name="device" id="d-mobile" value="mobile" checked><label for="d-mobile">Móvil</label>
+          <input type="radio" name="device" id="d-desktop" value="desktop"><label for="d-desktop">Escritorio</label>
+        </div>
+        <label class="check"><input type="checkbox" id="javascript"> Ejecutar JavaScript al rastrear (webs SPA)</label>
+      </div>
+      <details>
+        <summary>Opciones avanzadas</summary>
+        <div style="display:grid;gap:1rem">
+          <label>Solo estas rutas <small>Una por línea, relativas (p. ej. /blog/). Desactiva el rastreo de enlaces.</small><textarea id="urls"></textarea></label>
+          <label>Excluir rutas <small>Una por línea; admite expresiones regulares.</small><textarea id="exclude"></textarea></label>
+        </div>
+      </details>
+      <div><button class="btn" id="run">Iniciar auditoría</button></div>
+      <p class="msg" id="msg" role="status"></p>
+    </form>
+  </section>
+  <section class="card" id="running-card" hidden>
+    <h2>En curso</h2>
+    <div class="audits" id="audits"></div>
+  </section>
+  <section class="card">
+    <h2>Informes Lighthouse</h2>
+    <div class="row" style="margin-top:1rem"><select id="results" aria-label="Auditoría guardada"></select>
+      <div class="actions" id="exports" hidden>
+        <button class="btn-outline" id="copy-claude" title="Copia un resumen priorizado listo para pegar en Claude">Copiar para Claude</button>
+        <button class="btn-outline" data-export="md">Descargar .md</button>
+        <button class="btn-outline" data-export="csv">Descargar CSV</button>
+      </div>
+    </div>
+    <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pasa el ratón por «Problemas» para ver los principales.</p>
+    <div class="table" id="reports"><p class="empty">Todavía no hay informes guardados.</p></div>
+    <div id="viewer"></div>
+  </section>
+</main>
+<footer><div class="wrap">Motor de auditoría: <a href="https://github.com/harlan-zw/unlighthouse" target="_blank" rel="noopener">Unlighthouse</a> (MIT, © Harlan Wilton y colaboradores) y Google Lighthouse, sin modificar. Herramienta local: no exponer públicamente.</div></footer>
+<script>
+const $ = s => document.querySelector(s);
+const labels = { starting: 'Iniciando', scanning: 'Analizando', finished: 'Terminada', stopped: 'Detenida', failed: 'Error' };
+const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad'], ['best-practices', 'Buenas prácticas'], ['seo', 'SEO']];
+const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
+let timer, shownKey;
+
+function el(tag, attrs = {}, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs)) k === 'class' ? e.className = v : k.startsWith('on') ? e.addEventListener(k.slice(2), v) : e.setAttribute(k, v);
+  e.append(...kids.filter(k => k != null));
+  return e;
+}
+const json = async (url, opts) => { const r = await fetch(url, opts), d = await r.json(); if (!r.ok) throw Error(d.error); return d; };
+const score = v => v == null ? el('span', { class: 'score' }, '–') : el('span', { class: 'score ' + (v >= 90 ? 's-good' : v >= 50 ? 's-avg' : 's-bad') }, String(v));
+
+async function loadAudits() {
+  clearTimeout(timer);
+  const items = await json('/api/audits');
+  $('#running-card').hidden = !items.length;
+  $('#audits').replaceChildren(...items.map(a => {
+    const pct = a.status === 'finished' ? 100 : a.progress?.total ? Math.round(100 * a.progress.done / a.progress.total) : 2;
+    const bar = el('div', { class: 'bar' }, el('i'));
+    bar.firstChild.style.width = pct + '%';
+    const meta = [a.device === 'desktop' ? 'Escritorio' : 'Móvil', a.running && a.progress?.total ? a.progress.done + '/' + a.progress.total + ' tareas' : null, a.seconds ? a.seconds + ' s' : null, a.error].filter(Boolean).join(' · ');
+    return el('article', { class: 'audit' },
+      el('div', { class: 'audit-head' }, el('span', { class: 'audit-site' }, a.site), el('span', { class: 'tag ' + a.status }, labels[a.status] || a.status)),
+      bar, el('div', { class: 'meta' }, meta),
+      el('div', { class: 'actions' },
+        a.key ? el('button', { class: 'btn-outline', onclick: () => showResult(a.key) }, 'Ver informes') : null,
+        a.running ? el('button', { class: 'btn-outline', onclick: () => stop(a.id) }, 'Detener') : null,
+        el('button', { class: 'btn-outline', onclick: () => toggleLog(a.id) }, 'Registro')),
+      el('pre', { id: 'log-' + a.id, hidden: '' }));
+  }));
+  // los informes van apareciendo mientras se analiza
+  if (items.some(a => a.running && a.key === shownKey)) showResult(shownKey, true);
+  if (items.some(a => a.running)) timer = setTimeout(loadAudits, 2500);
+  else loadResults();
+}
+async function stop(id) { await fetch('/api/audits/' + id + '/stop', { method: 'POST' }); setTimeout(loadAudits, 800); }
+async function toggleLog(id) {
+  const pre = $('#log-' + id);
+  pre.textContent = (await json('/api/audits/' + id + '/log')).join('\n') || '(sin registro)';
+  pre.hidden = !pre.hidden;
+}
+async function loadResults() {
+  const results = await json('/api/results'), sel = $('#results');
+  sel.replaceChildren(...results.map(r => el('option', { value: r.key },
+    r.host + ' · ' + (r.formFactor === 'desktop' ? 'escritorio' : 'móvil') + ' · ' + r.count + ' URLs · ' + new Date(r.updated).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }))));
+  sel.hidden = !results.length;
+  if (results.length) showResult(results.some(r => r.key === shownKey) ? shownKey : results[0].key, true);
+}
+async function showResult(key, quiet) {
+  if (key !== shownKey) $('#viewer').replaceChildren();
+  shownKey = key;
+  const sel = $('#results');
+  if (![...sel.options].some(o => o.value === key)) sel.append(el('option', { value: key }, key.split('/')[0] + ' · en curso'));
+  sel.value = key; sel.hidden = false;
+  $('#exports').hidden = false;
+  const reports = await json('/api/results/' + key);
+  const current = $('#viewer iframe')?.dataset.src;
+  $('#reports').replaceChildren(reports.length ? el('table', {},
+    el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])), el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
+    el('tbody', {}, ...reports.map(r => el('tr', { class: r.report === current ? 'sel' : '' },
+      el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),
+      el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
+      el('td', { title: r.issues.slice(0, 5).map(i => '• ' + i.title).join('\n') }, String(r.issues.length)),
+      el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'))))))
+    : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
+  if (!quiet) $('#reports').scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+function view(r) {
+  const frame = el('iframe', { src: r.report, title: 'Informe Lighthouse de ' + r.url });
+  frame.dataset.src = r.report;
+  $('#viewer').replaceChildren(frame);
+  showResult(shownKey, true);
+  frame.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+$('#results').addEventListener('change', e => showResult(e.target.value));
+document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => { location.href = '/api/export/' + b.dataset.export + '/' + shownKey; }));
+$('#copy-claude').addEventListener('click', async e => {
+  const text = await (await fetch('/api/export/md/' + shownKey)).text();
+  await navigator.clipboard.writeText(text);
+  e.target.textContent = 'Copiado ✓';
+  setTimeout(() => e.target.textContent = 'Copiar para Claude', 2000);
+});
+$('#form').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('#run').disabled = true; $('#msg').textContent = '';
+  try {
+    await json('/api/audits', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      site: $('#site').value, device: document.querySelector('[name=device]:checked').value,
+      javascript: $('#javascript').checked, urls: $('#urls').value, exclude: $('#exclude').value }) });
+    await loadAudits();
+  } catch (err) { $('#msg').textContent = 'Error: ' + err.message; }
+  finally { $('#run').disabled = false; }
+});
+loadAudits();
+</script>
+</body>
+</html>

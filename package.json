@@ -1,0 +1,15 @@
+{
+  "name": "alicia-seo-tools",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node src/server.mjs",
+    "audit": "node node_modules/@unlighthouse/cli/dist/cli.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@unlighthouse/cli": "0.19.1"
+  },
+  "engines": {"node": ">=22.18.0"}
+}

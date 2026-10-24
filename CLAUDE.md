@@ -1,0 +1,17 @@
+# Lighthouse completo URL a URL
+
+Panel local (`npm run dev`, http://127.0.0.1:4173) que lanza Unlighthouse sin modificar y muestra el informe Lighthouse de cada URL.
+
+- `src/server.mjs`: panel, API, prioridad por gravedad y exportaciones (`/api/export/md|csv/<dominio>/<id>`).
+- `src/unlighthouse-runner.mjs`: réplica del CLI oficial; solo fija puerto interno y `locale: 'es'`.
+- `public/index.html`: interfaz (estilo aliciaruiz.es).
+
+No alterar mediciones ni configuración de Lighthouse más allá del idioma.
+
+## Analizar auditorías
+
+Los informes están en `.unlighthouse/<dominio>/<id>/reports/**/lighthouse.json`. Cuando la usuaria pida analizar una auditoría:
+
+1. Lee primero el resumen: `curl http://127.0.0.1:4173/api/export/md/<dominio>/<id>` (o calcula lo mismo desde los JSON si el panel no está en marcha).
+2. Abre `lighthouse.json` solo de las URLs de prioridad alta para ver detalles (`audits[id].details`).
+3. Agrupa problemas por causa común (plantilla, recurso compartido), prioriza por impacto y esfuerzo y propone acciones concretas.

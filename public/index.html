@@ -92,7 +92,7 @@ ol.issues .why{color:var(--ink-3)}
 .close-issues{margin-top:1rem;position:sticky;left:1.25rem}
 .nav-icons button{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);background:var(--white);cursor:pointer;padding:0}
 .nav-icons button:hover{border-color:var(--ink);color:var(--coral-h)}
-dialog{max-height:calc(100vh - 2rem);overflow:auto;border:1px solid var(--rule);border-radius:16px;padding:1.5rem;max-width:min(32rem,calc(100vw - 2rem));color:var(--ink-2);font-family:var(--f-q)}
+dialog:not(.drawer){max-height:calc(100vh - 2rem);overflow:auto;border:1px solid var(--rule);border-radius:16px;padding:1.5rem;max-width:min(32rem,calc(100vw - 2rem));color:var(--ink-2);font-family:var(--f-q)}
 dialog::backdrop{background:rgba(13,13,13,.35)}
 dialog h3{font-family:var(--f-j);font-size:.95rem;color:var(--ink);margin:1rem 0 .3rem}
 dialog label{margin-top:.8rem}
@@ -102,6 +102,50 @@ dialog input:focus{outline:none;border-color:var(--coral)}
 .origin-note .meta{flex-basis:100%;margin:0}
 .vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:9rem}
 .vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
+[hidden]{display:none!important}
+/* Ajustes: panel lateral que entra y sale con fundido */
+dialog.drawer{position:fixed;inset:0 0 0 auto;margin:0;width:min(30rem,100vw);height:100dvh;max-height:100dvh;border:0;border-left:1px solid var(--rule);border-radius:18px 0 0 18px;padding:0;background:var(--white);color:var(--ink-2);font-family:var(--f-q);box-shadow:-18px 0 40px rgba(13,13,13,.12);display:flex;flex-direction:column;opacity:0;transform:translateX(28px);transition:opacity .28s ease,transform .28s ease,overlay .28s allow-discrete,display .28s allow-discrete}
+dialog.drawer:not([open]){display:none}
+dialog.drawer[open]{opacity:1;transform:none}
+@starting-style{dialog.drawer[open]{opacity:0;transform:translateX(28px)}}
+dialog.drawer::backdrop{background:rgba(13,13,13,0);transition:background .28s ease,overlay .28s allow-discrete,display .28s allow-discrete}
+dialog.drawer[open]::backdrop{background:rgba(13,13,13,.32)}
+@starting-style{dialog.drawer[open]::backdrop{background:rgba(13,13,13,0)}}
+@media(prefers-reduced-motion:reduce){dialog.drawer,dialog.drawer::backdrop{transition:none;transform:none}}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:1.1rem 1.4rem;border-bottom:1px solid var(--rule);position:sticky;top:0;background:var(--white)}
+.drawer-body{overflow-y:auto;padding:.4rem 1.4rem 2rem;display:grid;gap:.2rem}
+.icon-btn{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--rule);border-radius:10px;background:var(--white);color:var(--ink);cursor:pointer}
+.icon-btn:hover{border-color:var(--ink);color:var(--coral-h)}
+.icon-btn svg{width:18px;height:18px}
+.set-block{padding:1.1rem 0;border-bottom:1px solid var(--rule);display:grid;gap:.6rem}
+.set-block:last-child{border-bottom:0}
+.set-block h3{font-family:var(--f-j);font-size:.98rem;color:var(--ink);margin:0}
+.set-block p{margin:0;font-size:.9rem;color:var(--ink-3);line-height:1.6}
+.set-block label{margin-top:.2rem}
+.set-block input,.set-block textarea{width:100%;font:inherit;font-size:.92rem;padding:.65rem .85rem;border:1.5px solid var(--rule);border-radius:12px;background:var(--white)}
+.set-block input:focus,.set-block textarea:focus{outline:none;border-color:var(--coral)}
+.set-block .actions{display:flex;flex-wrap:wrap;align-items:center;gap:.8rem}
+.set-block .msg:empty{display:none}
+.set-block details summary{font-size:.85rem}
+details.set-block>summary{list-style:none;cursor:pointer;display:flex;align-items:center;justify-content:space-between}
+details.set-block>summary::-webkit-details-marker{display:none}
+details.set-block>summary::after{content:"";width:8px;height:8px;border-right:2px solid var(--ink-3);border-bottom:2px solid var(--ink-3);transform:rotate(45deg);transition:transform .2s;margin-right:.3rem}
+details.set-block[open]>summary::after{transform:rotate(-135deg)}
+.set-head{display:flex;align-items:center;justify-content:space-between;gap:.6rem}
+.badge{font-family:var(--f-j);font-size:.7rem;font-weight:700;border-radius:100px;padding:.15rem .6rem;background:#EDEDED;color:var(--ink-3);white-space:nowrap}
+.badge.on{background:#E6F4EA;color:var(--ok)}
+.connected{display:flex;align-items:center;justify-content:space-between;gap:.8rem;flex-wrap:wrap;padding:.7rem .9rem;border:1px solid var(--rule);border-radius:12px;background:var(--bg);font-size:.9rem;color:var(--ink);overflow-wrap:anywhere}
+.btn-small{padding:.6rem 1.2rem;font-size:.86rem;box-shadow:none}
+.btn-text{background:none;border:0;padding:.2rem 0;font-family:var(--f-j);font-weight:700;font-size:.84rem;cursor:pointer;color:var(--ink)}
+.btn-text:hover{text-decoration:underline}
+.btn-text.btn-danger{color:#C5221F}
+.danger-zone h3{color:#C5221F}
+.footer-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
+.footer-links{display:flex;gap:.4rem}
+.footer-links a{display:grid;place-items:center;width:36px;height:36px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);background:var(--white);transition:border-color .15s,color .15s}
+.footer-links a:hover{border-color:var(--ink);color:var(--coral-h)}
+.footer-links svg{width:17px;height:17px}
+.footer-links img{width:19px;height:19px;border-radius:4px}
 .btn-link{background:none;border:0;padding:0;font:inherit;font-family:var(--f-j);font-weight:700;font-size:.82rem;color:var(--coral-h);cursor:pointer;text-decoration:none;white-space:nowrap}
 pre{font-size:.75rem;background:var(--bg);border-radius:10px;padding:.8rem;max-height:220px;overflow:auto;white-space:pre-wrap;overflow-wrap:anywhere}
 .empty{color:var(--ink-3);font-size:.95rem}
@@ -113,15 +157,7 @@ footer a{color:var(--ink)}
 <nav><div class="wrap nav-inner"><a class="nav-logo" href="/">Technical SEO Report <span class="nav-sub">Rendimiento, renderizado e indexación, URL a URL</span></a>
   <div class="nav-icons">
     <button type="button" id="open-settings" aria-label="Ajustes" title="Ajustes"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
-    <a href="https://github.com/ardiaz18" target="_blank" rel="noopener" aria-label="Mi perfil de GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
-    <a href="https://aliciaruiz.es/blog/" target="_blank" rel="noopener" aria-label="Mi blog" title="Blog"><img src="/assets/favicon.png" alt="" width="20" height="20"></a>
   </div></div></nav>
-<header class="hero"><div class="wrap">
-  <div class="eyebrow">Cómo funciona</div>
-  <p class="sub">Introduce la URL de un sitio y elige móvil o escritorio. La herramienta rastrea sus páginas (sitemap, robots.txt y enlaces internos) y analiza cada URL: el informe completo de Google Lighthouse con el motor Unlighthouse, sin alterar sus resultados, y las Core Web Vitals de usuarios reales de Chrome.</p>
-  <p class="sub">Si lo activas, comprueba también cómo puede verla Google: recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript o al interactuar y contenido oculto por CSS. Con Search Console conectado, añade lo que Google ha hecho de verdad: si la URL está indexada, si pudo rastrearla y qué canonical eligió.</p>
-  <p class="sub">Al terminar tendrás cada URL ordenada por prioridad, con qué hacer y dónde en cada problema, para revisarlo aquí o descargarlo con instrucciones listas para que Claude lo interprete.</p>
-</div></header>
 <main class="wrap">
   <section class="card">
     <h2>Nueva auditoría</h2>
@@ -175,37 +211,66 @@ footer a{color:var(--ink)}
     <div id="viewer"></div>
   </section>
 </main>
-<dialog id="settings" aria-labelledby="settings-title">
-  <h2 id="settings-title">Ajustes</h2>
-  <h3>Datos de usuarios reales (CrUX)</h3>
-  <p class="meta">Muestra las Core Web Vitals (LCP, INP y CLS) de visitantes reales de Chrome en los últimos 28 días, los mismos datos de PageSpeed Insights. Necesita una clave gratuita de Google Cloud: <a href="https://github.com/ardiaz18/technical-seo-report#datos-de-usuarios-reales-crux" target="_blank" rel="noopener">cómo conseguirla</a>. Se guarda solo en este equipo.</p>
-  <label>Clave de la API de CrUX<input type="password" id="crux-key" autocomplete="off" spellcheck="false" placeholder="AIza…"></label>
-  <p class="msg" id="crux-status" role="status"></p>
-  <div class="actions">
-    <button class="btn" id="crux-save">Guardar</button>
-    <button class="btn-outline" id="crux-remove" hidden>Quitar clave</button>
+<dialog id="settings" class="drawer" aria-labelledby="settings-title">
+  <div class="drawer-head">
+    <h2 id="settings-title">Ajustes</h2>
+    <button type="button" class="icon-btn" id="close-settings" aria-label="Cerrar ajustes">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+    </button>
   </div>
-  <h3>Google Search Console</h3>
-  <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad. <a href="https://github.com/ardiaz18/technical-seo-report#google-search-console" target="_blank" rel="noopener">Cómo configurarlo</a>.</p>
-  <p class="msg" id="gsc-status" role="status"></p>
-  <div id="gsc-forms">
-    <div class="actions" id="gsc-quick"><button class="btn" id="gsc-connect-quick">Conectar con Google Search Console</button></div>
+  <div class="drawer-body">
+    <details class="set-block" id="how">
+      <summary><h3>Cómo funciona</h3></summary>
+      <p>Introduce la URL de un sitio y elige móvil o escritorio. La herramienta rastrea sus páginas (sitemap, robots.txt y enlaces internos) y analiza cada URL: el informe completo de Google Lighthouse con el motor Unlighthouse, sin alterar sus resultados, y las Core Web Vitals de usuarios reales de Chrome.</p>
+      <p>Si lo activas, comprueba también cómo puede verla Google: recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript o al interactuar y contenido oculto por CSS. Con Search Console conectado, añade lo que Google ha hecho de verdad: si la URL está indexada, si pudo rastrearla y qué canonical eligió.</p>
+      <p>Al terminar tendrás cada URL ordenada por prioridad, con qué hacer y dónde en cada problema, para revisarlo aquí o descargarlo con instrucciones listas para que Claude lo interprete.</p>
+    </details>
+    <section class="set-block">
+      <div class="set-head"><h3>Datos de usuarios reales (CrUX)</h3><span class="badge" id="crux-badge"></span></div>
+      <p class="meta">Muestra las Core Web Vitals (LCP, INP y CLS) de visitantes reales de Chrome en los últimos 28 días, los mismos datos de PageSpeed Insights. Necesita una clave gratuita de Google Cloud: <a href="https://github.com/ardiaz18/technical-seo-report#datos-de-usuarios-reales-crux" target="_blank" rel="noopener">cómo conseguirla</a>. Se guarda solo en este equipo.</p>
+      <label>Clave de la API de CrUX<input type="password" id="crux-key" autocomplete="off" spellcheck="false" placeholder="AIza…"></label>
+      <div class="actions">
+        <button class="btn btn-small" id="crux-save">Guardar clave</button>
+        <button class="btn-text btn-danger" id="crux-remove" hidden>Quitar clave</button>
+      </div>
+      <p class="msg" id="crux-status" role="status"></p>
+    </section>
+    <section class="set-block">
+      <div class="set-head"><h3>Google Search Console</h3><span class="badge" id="gsc-badge"></span></div>
+      <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad. <a href="https://github.com/ardiaz18/technical-seo-report#google-search-console" target="_blank" rel="noopener">Cómo configurarlo</a>.</p>
+      <div class="connected" id="gsc-account" hidden>
+        <span id="gsc-account-text"></span>
+        <button class="btn-text btn-danger" id="gsc-disconnect">Desconectar</button>
+      </div>
+      <div id="gsc-forms">
+    <div class="actions" id="gsc-quick"><button class="btn btn-small" id="gsc-connect-quick">Conectar con Google Search Console</button></div>
     <details id="gsc-own">
       <summary>Con tu propio cliente OAuth (avanzado)</summary>
       <label>ID de cliente OAuth<input id="gsc-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com"></label>
       <label>Secreto del cliente<input type="password" id="gsc-client-secret" autocomplete="off" spellcheck="false"></label>
-      <div class="actions"><button class="btn" id="gsc-connect">Conectar con Google</button></div>
+      <div class="actions"><button class="btn btn-small" id="gsc-connect">Conectar con Google</button></div>
     </details>
     <details>
       <summary>Con cuenta de servicio (recomendado para equipos o servidor)</summary>
       <label>Contenido del archivo .json de la cuenta de servicio<textarea id="gsc-service" spellcheck="false" placeholder="{ &quot;type&quot;: &quot;service_account&quot;, … }"></textarea></label>
-      <div class="actions"><button class="btn" id="gsc-service-save">Guardar cuenta de servicio</button></div>
+      <div class="actions"><button class="btn btn-small" id="gsc-service-save">Guardar cuenta de servicio</button></div>
     </details>
   </div>
-  <div class="actions"><button class="btn-outline" id="gsc-disconnect" hidden>Desconectar Search Console</button></div>
-  <div class="actions" style="margin-top:1.2rem"><button class="btn-outline" onclick="this.closest('dialog').close()">Cerrar</button></div>
+      <p class="msg" id="gsc-status" role="status"></p>
+    </section>
+    <section class="set-block danger-zone">
+      <h3>Limpiar registro de auditorías</h3>
+      <p class="meta">Borra de este equipo todas las auditorías guardadas, con sus informes Lighthouse y sus datos de usuarios reales, renderizado y Search Console. No afecta a tus claves ni a la conexión con Search Console. No se puede deshacer.</p>
+      <div class="actions"><button class="btn-outline btn-danger btn-small" id="clear-audits">Limpiar registro de auditorías</button></div>
+      <p class="msg" id="clear-status" role="status"></p>
+    </section>
+  </div>
 </dialog>
-<footer><div class="wrap">Motor de auditoría: <a href="https://github.com/harlan-zw/unlighthouse" target="_blank" rel="noopener">Unlighthouse</a> (MIT, © Harlan Wilton y colaboradores) y Google Lighthouse, sin modificar. Herramienta local: no exponer públicamente.</div></footer>
+<footer><div class="wrap footer-inner"><div>Motor de auditoría: <a href="https://github.com/harlan-zw/unlighthouse" target="_blank" rel="noopener">Unlighthouse</a> (MIT, © Harlan Wilton y colaboradores) y Google Lighthouse, sin modificar. Herramienta local: no exponer públicamente.</div>
+  <div class="footer-links">
+    <a href="https://github.com/ardiaz18" target="_blank" rel="noopener" aria-label="Mi perfil de GitHub" title="GitHub"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 .5a11.5 11.5 0 0 0-3.64 22.41c.58.1.79-.25.79-.56v-2c-3.2.7-3.88-1.37-3.88-1.37-.53-1.33-1.28-1.69-1.28-1.69-1.05-.71.08-.7.08-.7 1.16.08 1.77 1.19 1.77 1.19 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.68 0-1.26.45-2.28 1.19-3.09-.12-.29-.52-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.77 0c2.2-1.49 3.17-1.18 3.17-1.18.63 1.59.23 2.76.11 3.05.74.81 1.19 1.83 1.19 3.09 0 4.41-2.69 5.38-5.26 5.67.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 12 .5Z"/></svg></a>
+    <a href="https://aliciaruiz.es/blog/" target="_blank" rel="noopener" aria-label="Mi blog" title="Blog"><img src="/assets/favicon.png" alt="" width="20" height="20"></a>
+  </div></div></footer>
 <script>
 const $ = s => document.querySelector(s);
 const labels = { starting: 'Iniciando', scanning: 'Analizando', finished: 'Terminada', stopped: 'Detenida', failed: 'Error' };
@@ -405,9 +470,12 @@ function googleCell(r) {
 }
 function showGsc() {
   const g = settings.gsc || {};
-  $('#gsc-status').textContent = g.connected ? 'Conectado' + (g.account ? ' como ' + g.account : '') + (g.mode === 'service' ? ' (cuenta de servicio)' : '') + '.' : 'Sin conectar.';
+  $('#gsc-badge').textContent = g.connected ? 'Conectado' : 'Sin conectar';
+  $('#gsc-badge').className = 'badge' + (g.connected ? ' on' : '');
+  $('#gsc-account').hidden = !g.connected;
+  $('#gsc-account-text').textContent = g.connected ? (g.account || 'Cuenta conectada') + (g.mode === 'service' ? ' · cuenta de servicio' : '') : '';
   $('#gsc-forms').hidden = !!g.connected;
-  $('#gsc-disconnect').hidden = !g.connected;
+  $('#gsc-status').textContent = '';
   // con el cliente de la herramienta basta un botón; el propio queda como opción avanzada
   $('#gsc-quick').hidden = !g.builtIn;
   $('#gsc-own').open = !g.builtIn;
@@ -440,18 +508,32 @@ $('#gsc-disconnect').addEventListener('click', async () => {
 const refreshGsc = async () => { await loadSettings(); showGsc(); if (settings.gsc?.connected && shownKey) showResult(shownKey, true); };
 addEventListener('message', e => { if (e.data === 'gsc-connected') refreshGsc(); });
 addEventListener('focus', () => { if ($('#settings').open && !settings.gsc?.connected) refreshGsc(); });
+function showCrux() {
+  const on = !!settings.crux?.enabled;
+  $('#crux-badge').textContent = on ? 'Activado' : 'Sin configurar';
+  $('#crux-badge').className = 'badge' + (on ? ' on' : '');
+  $('#crux-remove').hidden = !on || settings.crux.fromEnv;
+  $('#crux-save').textContent = on ? 'Cambiar clave' : 'Guardar clave';
+}
 function openSettings() {
   showGsc();
-  $('#crux-status').textContent = settings.crux?.enabled ? 'Datos de usuarios reales activados.' : 'Sin clave: la columna «Usuarios reales» no muestra datos.';
+  showCrux();
   $('#crux-key').value = '';
-  $('#crux-remove').hidden = !settings.crux?.enabled || settings.crux.fromEnv;
+  $('#crux-status').textContent = $('#clear-status').textContent = '';
+  // la primera vez se abre «Cómo funciona»
+  $('#how').open = !resultsMeta.length;
   $('#settings').showModal();
 }
+$('#close-settings').addEventListener('click', () => $('#settings').close());
+// clic fuera del panel (en el fondo oscuro) para cerrarlo
+$('#settings').addEventListener('click', e => { if (e.target === e.currentTarget) e.currentTarget.close(); });
 async function saveKey(value) {
   $('#crux-status').textContent = value ? 'Comprobando la clave…' : 'Quitando la clave…';
   try {
     settings = await json('/api/settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ cruxApiKey: value }) });
-    $('#settings').close();
+    showCrux();
+    $('#crux-key').value = '';
+    $('#crux-status').textContent = value ? 'Clave guardada: la columna «Usuarios reales» ya muestra datos.' : 'Clave quitada.';
     for (const k in fieldError) delete fieldError[k];
     if (shownKey) showResult(shownKey, true);
   } catch (err) { $('#crux-status').textContent = 'Error: ' + err.message; }
@@ -459,6 +541,17 @@ async function saveKey(value) {
 $('#open-settings').addEventListener('click', openSettings);
 $('#crux-save').addEventListener('click', () => saveKey($('#crux-key').value.trim()));
 $('#crux-remove').addEventListener('click', () => saveKey(''));
+$('#clear-audits').addEventListener('click', async () => {
+  const n = resultsMeta.length;
+  if (!n) { $('#clear-status').textContent = 'No hay auditorías guardadas.'; return; }
+  if (!confirm(`¿Borrar las ${n} auditorías guardadas en este equipo?\n\nSe eliminan todos sus informes y datos. Tus claves y la conexión con Search Console se mantienen. No se puede deshacer.`)) return;
+  try {
+    const { deleted } = await json('/api/results', { method: 'DELETE' });
+    $('#clear-status').textContent = `Registro limpio: ${deleted} auditoría${deleted === 1 ? '' : 's'} borrada${deleted === 1 ? '' : 's'}.`;
+    shownKey = null;
+    await loadAudits();
+  } catch (err) { $('#clear-status').textContent = 'No se pudo limpiar: ' + err.message; }
+});
 function view(r) {
   const frame = el('iframe', { src: r.report, title: 'Informe Lighthouse de ' + r.url });
   frame.dataset.src = r.report;

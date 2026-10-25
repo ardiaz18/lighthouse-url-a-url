@@ -226,6 +226,14 @@ async function deleteAudit(key) {
   for (const file of reportCache.keys()) if (file.startsWith(dir + sep)) reportCache.delete(file);
   for (const a of audits.values()) if (a.key === key) audits.delete(a.id);
 }
+// Limpia el registro completo (no toca claves ni conexiones, que están en settings.json)
+async function deleteAllAudits() {
+  if ([...audits.values()].some(a => a.running || a.rendering) || collecting.size) throw Error('Hay una auditoría en curso o consultando datos. Espera a que termine o detenla antes de limpiar el registro.');
+  const results = await listResults();
+  for (const r of results) await deleteAudit(r.key);
+  for (const a of audits.values()) if (!a.running) audits.delete(a.id);
+  return results.length;
+}
 async function collectGoogle(key) {
   if (!collecting.has('google:' + key)) {
     const job = (async () => {
@@ -486,6 +494,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
+    if (req.method === 'DELETE' && path === '/api/results') return send(200, { deleted: await deleteAllAudits() });
     if (req.method === 'DELETE' && path.startsWith('/api/results/')) { await deleteAudit(path.slice('/api/results/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }

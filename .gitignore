@@ -3,3 +3,4 @@ node_modules/
 .env
 playwright-report/
 settings.json
+google-client.json

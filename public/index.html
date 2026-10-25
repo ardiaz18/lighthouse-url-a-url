@@ -185,8 +185,9 @@ footer a{color:var(--ink)}
   <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad. <a href="https://github.com/ardiaz18/site-speed-report#google-search-console" target="_blank" rel="noopener">Cómo configurarlo</a>.</p>
   <p class="msg" id="gsc-status" role="status"></p>
   <div id="gsc-forms">
-    <details open>
-      <summary>Con tu cuenta de Google</summary>
+    <div class="actions" id="gsc-quick"><button class="btn" id="gsc-connect-quick">Conectar con Google Search Console</button></div>
+    <details id="gsc-own">
+      <summary>Con tu propio cliente OAuth (avanzado)</summary>
       <label>ID de cliente OAuth<input id="gsc-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com"></label>
       <label>Secreto del cliente<input type="password" id="gsc-client-secret" autocomplete="off" spellcheck="false"></label>
       <div class="actions"><button class="btn" id="gsc-connect">Conectar con Google</button></div>
@@ -384,6 +385,9 @@ function showGsc() {
   $('#gsc-status').textContent = g.connected ? 'Conectado' + (g.account ? ' como ' + g.account : '') + (g.mode === 'service' ? ' (cuenta de servicio)' : '') + '.' : 'Sin conectar.';
   $('#gsc-forms').hidden = !!g.connected;
   $('#gsc-disconnect').hidden = !g.connected;
+  // con el cliente de la herramienta basta un botón; el propio queda como opción avanzada
+  $('#gsc-quick').hidden = !g.builtIn;
+  $('#gsc-own').open = !g.builtIn;
 }
 async function gscRequest(path, body, pending) {
   $('#gsc-status').textContent = pending;
@@ -391,10 +395,12 @@ async function gscRequest(path, body, pending) {
     return await json(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
   } catch (err) { $('#gsc-status').textContent = 'Error: ' + err.message; return null; }
 }
-$('#gsc-connect').addEventListener('click', async () => {
-  const data = await gscRequest('/api/gsc/connect', { clientId: $('#gsc-client-id').value, clientSecret: $('#gsc-client-secret').value }, 'Abriendo Google…');
-  if (data) { window.open(data.url, '_blank'); $('#gsc-status').textContent = 'Autoriza el acceso en la pestaña de Google y vuelve aquí.'; }
-});
+async function connectGsc(body) {
+  const data = await gscRequest('/api/gsc/connect', body, 'Abriendo Google…');
+  if (data) { window.open(data.url, '_blank'); $('#gsc-status').textContent = 'Elige tu cuenta y pulsa «Permitir» en la pestaña de Google; después vuelve aquí.'; }
+}
+$('#gsc-connect-quick').addEventListener('click', () => connectGsc({}));
+$('#gsc-connect').addEventListener('click', () => connectGsc({ clientId: $('#gsc-client-id').value, clientSecret: $('#gsc-client-secret').value }));
 $('#gsc-service-save').addEventListener('click', async () => {
   const data = await gscRequest('/api/gsc/service', { json: $('#gsc-service').value }, 'Comprobando la cuenta de servicio…');
   if (data) {

@@ -3,6 +3,7 @@ import { actions, metricSources } from './actions.mjs';
 import { createCrux } from './crux.mjs';
 import { createRender } from './render.mjs';
 import { createGsc, fetchStates, indexingStates } from './gsc.mjs';
+import { googleClient } from './google-client.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +21,8 @@ const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': '
 const crux = createCrux(root);
 const render = createRender();
 const gsc = createGsc(root);
+// builtIn: la herramienta trae su propio cliente OAuth y basta con el botón de conectar
+const gscStatus = async () => ({ ...await gsc.status(), builtIn: !!await googleClient(root) });
 const collecting = new Map();
 const audits = new Map();
 let nextId = 1;
@@ -475,11 +478,17 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
-    if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status(), gsc: await gsc.status() });
-    if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status(), gsc: await gsc.status() }); }
-    if (req.method === 'POST' && path === '/api/gsc/connect') { const b = await readJson(req); return send(200, { url: await gsc.authUrl(b.clientId?.trim(), b.clientSecret?.trim(), `http://127.0.0.1:${port}/`) }); }
-    if (req.method === 'POST' && path === '/api/gsc/service') { const n = await gsc.saveServiceAccount((await readJson(req)).json); return send(200, { properties: n, gsc: await gsc.status() }); }
-    if (req.method === 'POST' && path === '/api/gsc/disconnect') { await gsc.disconnect(); return send(200, { gsc: await gsc.status() }); }
+    if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status(), gsc: await gscStatus() });
+    if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status(), gsc: await gscStatus() }); }
+    if (req.method === 'POST' && path === '/api/gsc/connect') {
+      // cliente propio pegado en Ajustes o, si no, el de la herramienta (google-client.json o variables de entorno)
+      const b = await readJson(req), own = b.clientId?.trim() && { clientId: b.clientId.trim(), clientSecret: b.clientSecret?.trim() };
+      const client = own || await googleClient(root);
+      if (!client) throw Error('Falta el archivo google-client.json con el cliente OAuth de la herramienta. Pídeselo a quien la administra o usa la opción avanzada con tu propio cliente.');
+      return send(200, { url: await gsc.authUrl(client.clientId, client.clientSecret, `http://127.0.0.1:${port}/`) });
+    }
+    if (req.method === 'POST' && path === '/api/gsc/service') { const n = await gsc.saveServiceAccount((await readJson(req)).json); return send(200, { properties: n, gsc: await gscStatus() }); }
+    if (req.method === 'POST' && path === '/api/gsc/disconnect') { await gsc.disconnect(); return send(200, { gsc: await gscStatus() }); }
     if (req.method === 'POST' && path.startsWith('/api/google/')) { await collectGoogle(path.slice('/api/google/'.length)); return send(200, { ok: true }); }
     const m = path.match(/^\/api\/audits\/(\d+)(\/stop|\/log)$/);
     const audit = m && audits.get(Number(m[1]));

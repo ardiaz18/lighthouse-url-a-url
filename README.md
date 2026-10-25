@@ -63,9 +63,11 @@ La clave se guarda solo en tu equipo (`settings.json`, que no se sube a git). En
 
 Con Search Console conectado aparece la columna **Google**: el estado real de cada URL según Google (API de Inspección de URLs). Detecta lo que no se puede simular: si la URL está indexada y por qué no, si **Googlebot no pudo descargarla** en su último rastreo (403 por firewall o CDN, errores 5xx, robots.txt…), si Google ha elegido otra canonical y cuándo la rastreó. Solo funciona con webs a las que tengas acceso en Search Console, hasta 2.000 URLs al día por propiedad. Los resultados se guardan con la auditoría.
 
-Se configura en el mismo proyecto de Google Cloud que la clave de CrUX. Primero, en **APIs y servicios → Biblioteca**, habilita **Google Search Console API**. Después elige una opción:
+**Conexión rápida:** si la carpeta de la herramienta tiene el archivo `google-client.json` (el cliente OAuth de la herramienta, que no se sube a GitHub y te pasa quien la administra), basta con **Ajustes (⚙) → Conectar con Google Search Console**, elegir tu cuenta y pulsar **Permitir**. En un servidor, ese cliente va en las variables de entorno `GOOGLE_CLIENT_ID` y `GOOGLE_CLIENT_SECRET`.
 
-**Con tu cuenta de Google** (uso personal):
+Si no tienes ese archivo, se configura en el mismo proyecto de Google Cloud que la clave de CrUX. Primero, en **APIs y servicios → Biblioteca**, habilita **Google Search Console API**. Después elige una opción:
+
+**Con tu cuenta de Google** (Ajustes → «Con tu propio cliente OAuth»):
 
 1. En **APIs y servicios → Pantalla de consentimiento de OAuth**, configúrala como **Externa** y añade tu correo.
 2. En **Público** (o «Estado de publicación»), pulsa **Publicar aplicación** para pasarla a **En producción**. Si se queda «En pruebas», Google desconecta la herramienta cada 7 días. Al conectar verás el aviso «Google no ha verificado esta aplicación»: es tu propia app, pulsa *Configuración avanzada → Ir a…*.

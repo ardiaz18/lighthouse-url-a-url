@@ -1,4 +1,4 @@
-# Site Speed Report
+# Technical SEO Report
 
 Panel local (`npm run dev`, http://127.0.0.1:4173) que lanza Unlighthouse sin modificar y muestra el informe Lighthouse de cada URL.
 

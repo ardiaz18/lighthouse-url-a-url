@@ -48,6 +48,8 @@ details[open] summary{margin-bottom:1rem}
 .btn:disabled{opacity:.5;cursor:wait}
 .btn-outline{font-family:var(--f-j);font-weight:600;font-size:.85rem;color:var(--ink);background:var(--white);border:1.5px solid var(--rule);padding:.5rem 1.1rem;border-radius:100px;cursor:pointer;text-decoration:none}
 .btn-outline:hover{border-color:var(--ink)}
+.btn-danger{color:#C5221F}
+.btn-danger:hover{border-color:#C5221F}
 .msg{font-size:.9rem;color:var(--coral-h);min-height:1.4em}
 .audits{display:grid;gap:1rem;margin-top:1rem}
 .audit{border:1px solid var(--rule);border-radius:14px;padding:1.1rem 1.25rem;display:grid;gap:.7rem}
@@ -156,6 +158,7 @@ footer a{color:var(--ink)}
         <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado con las instrucciones para Claude">Analizar con Claude</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
         <button class="btn-outline" id="check-render" hidden title="Comprueba robots.txt y HTML inicial frente a renderizado en todas las URLs de esta auditoría">Comprobar renderizado para Google</button>
+        <button class="btn-outline btn-danger" id="delete-audit" title="Elimina esta auditoría y todos sus informes de este equipo">Borrar auditoría</button>
       </div>
     </div>
     <p class="meta" style="margin-top:.6rem">Ordenadas por gravedad: puntuaciones bajas en Rendimiento y SEO pesan más. Pulsa el número de «Problemas» para ver qué hacer y dónde.</p>
@@ -254,8 +257,16 @@ async function toggleLog(id) {
 async function loadResults() {
   const results = resultsMeta = await json('/api/results'), sel = $('#results');
   sel.replaceChildren(...results.map(r => el('option', { value: r.key },
-    r.host + ' · ' + (r.formFactor === 'desktop' ? 'escritorio' : 'móvil') + ' · ' + r.count + ' URLs · ' + new Date(r.updated).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }))));
+    r.host + ' · ' + (r.formFactor === 'desktop' ? 'escritorio' : 'móvil') + ' · ' + r.count + (r.count === 1 ? ' URL · ' : ' URLs · ') + new Date(r.updated).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' }))));
   sel.hidden = !results.length;
+  if (!results.length) {
+    // no queda ninguna auditoría guardada
+    shownKey = null;
+    $('#exports').hidden = true;
+    $('#sample-note').hidden = $('#limit-note').hidden = $('#analysis').hidden = true;
+    $('#viewer').replaceChildren();
+    $('#reports').replaceChildren(el('p', { class: 'empty' }, 'Todavía no hay informes guardados.'));
+  }
   if (results.length) showResult(results.some(r => r.key === shownKey) ? shownKey : results[0].key, true);
 }
 async function showResult(key, quiet) {
@@ -340,6 +351,17 @@ async function checkRender(key) {
   if (shownKey === key) { await loadResults(); }
 }
 $('#check-render').addEventListener('click', () => checkRender(shownKey));
+$('#delete-audit').addEventListener('click', async () => {
+  const label = $('#results').selectedOptions[0]?.textContent || shownKey;
+  if (!confirm(`¿Borrar la auditoría «${label}»?\n\nSe eliminan de este equipo sus informes Lighthouse y los datos de usuarios reales, renderizado y Search Console. No se puede deshacer.`)) return;
+  try {
+    await json('/api/results/' + shownKey, { method: 'DELETE' });
+    shownKey = null;
+    $('#viewer').replaceChildren();
+    $('#analysis').hidden = true;
+    await loadAudits();
+  } catch (err) { $('#analysis').hidden = false; $('#analysis').textContent = 'No se pudo borrar: ' + err.message; }
+});
 // Usuarios reales: LCP, INP y CLS en verde/ámbar/rojo según los umbrales de Google
 const fieldFmt = { lcp: v => (v / 1000).toFixed(1).replace('.', ',') + ' s', inp: v => Math.round(v) + ' ms', cls: v => v.toFixed(2).replace('.', ',') };
 const ratingClass = { good: 's-good', needs: 's-avg', poor: 's-bad' };

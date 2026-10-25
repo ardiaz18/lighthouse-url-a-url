@@ -46,6 +46,36 @@ export function blockingRule(rules, url) {
   }
   return best && !best.allow ? best : null;
 }
+// Qué recursos bloqueados importan para el renderizado: los del propio sitio (JS, CSS y datos)
+// y los JS/CSS de terceros que no sean de medición o publicidad. El resto se ignora.
+const tracking = /googlesyndication|doubleclick|google-analytics|googletagmanager|googleadservices|google\.[a-z.]+\/(pagead|ads)|facebook\.(com|net)|fbcdn|connect\.facebook|clarity\.ms|hotjar|linkedin|licdn|twitter|t\.co\/|tiktok|bing\.com|pinterest|criteo|taboola|outbrain|adsrvr|hubspot|hs-analytics|segment\.(io|com)|mixpanel|amplitude|yandex|matomo|piwik|quantserve|scorecardresearch|cloudflareinsights|newrelic|nr-data|sentry|recaptcha/i;
+const site = host => {
+  const parts = host.replace(/^www\./, '').split('.');
+  return parts.slice(parts.length > 2 && parts.at(-2).length <= 3 && parts.at(-1).length === 2 ? -3 : -2).join('.');
+};
+export function blockedRelevance(pageUrl, resourceUrl, type) {
+  const page = new URL(pageUrl), res = new URL(resourceUrl);
+  if (site(res.hostname) === site(page.hostname)) return 'own';
+  if ((type === 'Script' || type === 'Stylesheet') && !tracking.test(res.hostname + res.pathname)) return 'third';
+  return null;
+}
+function blockedFindings(pageUrl, blocked) {
+  const out = [];
+  const kind = line => blockedRelevance(pageUrl, 'https://' + line.split(' ')[0], (line.match(/\((\w+)\)/) || [])[1]);
+  const own = blocked.filter(l => kind(l) === 'own'), third = blocked.filter(l => kind(l) === 'third');
+  const n = l => `${l.length} recurso${l.length > 1 ? 's' : ''}`;
+  if (own.length) out.push({ level: 'problema', title: 'Recursos del propio sitio bloqueados por robots.txt', value: n(own), where: own });
+  if (third.length) out.push({ level: 'aviso', title: 'Scripts o estilos de otros dominios bloqueados por robots.txt', value: n(third), where: third });
+  return out;
+}
+// Auditorías anteriores guardaban todos los recursos bloqueados juntos: se reclasifican al leerlas
+const oldBlockedTitle = 'Recursos necesarios para renderizar bloqueados por robots.txt';
+function reclassify(pageUrl, entry) {
+  if (!entry.findings?.some(f => f.title === oldBlockedTitle)) return entry;
+  const old = entry.findings.find(f => f.title === oldBlockedTitle);
+  const findings = [...entry.findings.filter(f => f !== old), ...blockedFindings(pageUrl, old.where || [])];
+  return { ...entry, findings, status: findings.some(f => f.level === 'problema') ? 'problema' : findings.length ? 'aviso' : 'ok' };
+}
 const robotsCache = new Map();
 function robotsFor(origin) {
   if (!robotsCache.has(origin)) robotsCache.set(origin, (async () => {
@@ -126,10 +156,11 @@ export async function checkUrl(browser, url, requests) {
   if (pageRule) add('problema', 'La URL está bloqueada para Googlebot en robots.txt', `Disallow: ${pageRule.path}`);
   const blocked = [];
   for (const r of requests.filter(r => critical.has(r.resourceType) && /^https?:/.test(r.url))) {
+    if (!blockedRelevance(url, r.url, r.resourceType)) continue; // medición, publicidad y peticiones a terceros: no afectan al renderizado
     const rule = blockingRule((await robotsFor(new URL(r.url).origin)).rules, r.url);
     if (rule) blocked.push(`${r.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 100)} (${r.resourceType}) — Disallow: ${rule.path}`);
   }
-  if (blocked.length) add('problema', 'Recursos necesarios para renderizar bloqueados por robots.txt', `${blocked.length} recurso${blocked.length > 1 ? 's' : ''}`, blocked);
+  findings.push(...blockedFindings(url, blocked));
 
   // 2. HTML inicial frente a renderizado (misma extracción en los dos)
   const res = await fetch(url, { headers: { 'User-Agent': mobileUA }, signal: AbortSignal.timeout(20000) });
@@ -195,7 +226,8 @@ export function createRender() {
   return {
     async cached(dir) {
       const cache = await readFile(join(dir, 'render.json'), 'utf-8').then(JSON.parse).catch(() => null);
-      return cache?.version === version ? cache.data : null;
+      if (cache?.version !== version) return null;
+      return Object.fromEntries(Object.entries(cache.data).map(([url, entry]) => [url, entry.status === 'error' ? entry : reclassify(url, entry)]));
     },
     // comprueba las URLs que falten, de dos en dos, y guarda el resultado con la auditoría
     async collect(dir, reports) {

@@ -5,7 +5,7 @@ import { createRender } from './render.mjs';
 import { createGsc, fetchStates, indexingStates } from './gsc.mjs';
 import { googleClient } from './google-client.mjs';
 import { fork } from 'node:child_process';
-import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
+import { readFile, readdir, stat, writeFile, rm, rmdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import { dirname, join, normalize, extname, relative, sep } from 'node:path';
 
@@ -191,7 +191,8 @@ function renderIssues(g) {
 }
 const renderActions = {
   'La URL está bloqueada para Googlebot en robots.txt': 'Si la URL debe posicionar, quita o ajusta la regla Disallow indicada en robots.txt. Si no debe indexarse, usa noindex en lugar de bloquearla (si está bloqueada, Google no puede ver el noindex).',
-  'Recursos necesarios para renderizar bloqueados por robots.txt': 'Permite a Googlebot los archivos indicados en «Dónde»: quita o ajusta la regla Disallow (p. ej. añade «Allow: /wp-content/» o «Allow: /*.js» y «Allow: /*.css»). Sin ellos Google puede ver la página rota o sin contenido. Si el recurso es de otro dominio, depende del robots.txt de ese dominio.',
+  'Recursos del propio sitio bloqueados por robots.txt': 'Tu robots.txt impide a Googlebot descargar los archivos indicados en «Dónde», y sin ellos Google puede ver la página rota o sin contenido. Quita o ajusta la regla Disallow que aparece junto a cada uno (p. ej. añade «Allow: /wp-content/» o «Allow: /*.js» y «Allow: /*.css»).',
+  'Scripts o estilos de otros dominios bloqueados por robots.txt': 'Estos archivos son de otro dominio y es su propio robots.txt el que los bloquea: tú no puedes cambiarlo. Solo importa si el script o el estilo pinta contenido visible (un widget, un catálogo, una tipografía…). Si es así, aloja el recurso en tu dominio o asegúrate de que el contenido principal no depende de él.',
   'robots.txt no disponible': 'Haz que /robots.txt responda con 200 (o 404 si no lo usas). Si responde con error 5xx, Google puede dejar de rastrear el sitio temporalmente.',
   'La meta robots cambia con JavaScript': 'Pon la meta robots definitiva en el HTML que envía el servidor. Si el HTML inicial lleva noindex, Google puede no llegar a renderizar la página y la descarta aunque el JavaScript lo quite.',
   'La canonical solo aparece con JavaScript': 'Incluye la canonical en el HTML que envía el servidor (desde el plugin SEO o la plantilla), no la añadas con JavaScript o con Tag Manager.',
@@ -215,6 +216,16 @@ async function collectRender(key) {
     collecting.set('render:' + key, job);
   }
   return collecting.get('render:' + key);
+}
+// Borra una auditoría guardada (informes, datos reales, renderizado y Search Console)
+async function deleteAudit(key) {
+  const dir = auditDir(key);
+  if ([...audits.values()].some(a => (a.running || a.rendering) && a.key === key) || [...collecting.keys()].some(k => k.endsWith(key)))
+    throw Error('Esta auditoría está en curso o consultando datos. Espera a que termine o detenla antes de borrarla.');
+  await rm(dir, { recursive: true, force: true });
+  await rmdir(dirname(dir)).catch(() => {}); // la carpeta del dominio, si se ha quedado vacía
+  for (const file of reportCache.keys()) if (file.startsWith(dir + sep)) reportCache.delete(file);
+  for (const a of audits.values()) if (a.key === key) audits.delete(a.id);
 }
 async function collectGoogle(key) {
   if (!collecting.has('google:' + key)) {
@@ -476,6 +487,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
+    if (req.method === 'DELETE' && path.startsWith('/api/results/')) { await deleteAudit(path.slice('/api/results/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
     if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status(), gsc: await gscStatus() });

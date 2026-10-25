@@ -1,6 +1,7 @@
 import http from 'node:http';
 import { actions, metricSources } from './actions.mjs';
 import { createCrux } from './crux.mjs';
+import { createRender } from './render.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -16,6 +17,7 @@ const maxBytes = 12_000;
 const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'application/javascript', '.png': 'image/png', '.svg': 'image/svg+xml', '.jpeg': 'image/jpeg', '.json': 'application/json' };
 
 const crux = createCrux(root);
+const render = createRender();
 const collecting = new Map();
 const audits = new Map();
 let nextId = 1;
@@ -44,7 +46,7 @@ function startAudit(input) {
   if (list(input.exclude)) args.push('--exclude-urls', list(input.exclude));
   if (input.allUrls) args.push('--disable-dynamic-sampling');
   // con rutas manuales Unlighthouse no rastrea ni muestrea
-  const options = { sampling: !input.allUrls && !list(input.urls), manualUrls: !!list(input.urls) };
+  const options = { sampling: !input.allUrls && !list(input.urls), manualUrls: !!list(input.urls), render: !!input.render };
   const audit = { id: nextId++, site, device: input.device === 'desktop' ? 'desktop' : 'mobile', port: freePort(), status: 'starting', running: true, key: null, api: null, startedAt: Date.now(), log: [], error: null };
   const child = fork(runner, args, { cwd: root, env: { ...process.env, UNLIGHTHOUSE_PORT: String(audit.port), NO_COLOR: '1' }, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   const addLog = chunk => { audit.log.push(...String(chunk).replace(/\x1b\[[0-9;]*m/g, '').split(/\r?\n/).filter(Boolean)); audit.log = audit.log.slice(-200); };
@@ -60,6 +62,11 @@ function startAudit(input) {
   });
   child.on('exit', code => {
     audit.running = false;
+    // la comprobación de renderizado empieza al terminar, para no falsear las mediciones de Lighthouse
+    if (options.render && audit.key && audit.status === 'finished') {
+      audit.rendering = true;
+      collectRender(audit.key).catch(e => { audit.error = 'Renderizado para Google: ' + e.message; }).finally(() => { audit.rendering = false; });
+    }
     if (audit.status !== 'finished') audit.status = code === 0 ? 'stopped' : 'failed';
   });
   audit.child = child;
@@ -103,6 +110,7 @@ async function readReport(file) {
     issues: issues(lh),
     report: '/informes/' + toKey(join(dirname(file), 'lighthouse.html')).split('/').map(encodeURIComponent).join('/')
   };
+  Object.defineProperty(data, 'requests', { value: (lh.audits?.['network-requests']?.details?.items || []).map(i => ({ url: i.url, resourceType: i.resourceType })) });
   reportCache.set(file, { mtimeMs, data });
   return data;
 }
@@ -117,7 +125,8 @@ async function listResults() {
       if (!files.length) continue;
       const first = await readReport(files[0]).catch(() => null);
       const options = await readFile(join(dir, 'audit-options.json'), 'utf-8').then(JSON.parse).catch(() => ({}));
-      results.push({ key: toKey(dir), host: host.name.replace('꞉', ':'), count: files.length, formFactor: first?.formFactor, sampling: options.sampling, updated: (await stat(dir)).mtimeMs });
+      const hasRender = await stat(join(dir, 'render.json')).then(() => true, () => false);
+      results.push({ key: toKey(dir), host: host.name.replace('꞉', ':'), count: files.length, formFactor: first?.formFactor, sampling: options.sampling, render: !!options.render || hasRender, updated: (await stat(dir)).mtimeMs });
     }
   }
   return results.sort((a, b) => b.updated - a.updated);
@@ -132,12 +141,46 @@ async function resultReports(key) {
   const reports = (await Promise.all((await findReports(join(dir, 'reports'))).map(f => readReport(f).catch(e => { console.error('No se pudo leer', f, e.message); return null; })))).filter(Boolean);
   // datos de usuarios reales: field queda undefined si aún no se han consultado y null si Google no tiene datos
   const field = await crux.cached(dir);
+  const rendered = await render.cached(dir);
   const merged = reports.map(r => {
-    if (!field || !(r.url in field)) return r;
-    const f = field[r.url];
-    return { ...r, field: f, ...priority(r.scores, f) };
+    const f = field && r.url in field ? field[r.url] : undefined;
+    const g = rendered?.[r.url] && { status: rendered[r.url].status, error: rendered[r.url].error, findings: rendered[r.url].findings };
+    if (f === undefined && !g) return r;
+    return { ...r, ...(f !== undefined && { field: f }), ...(g && { render: g, issues: [...renderIssues(g), ...r.issues] }), ...priority(r.scores, f, g?.status) };
   });
   return merged.sort((a, b) => b.severity - a.severity || a.url.localeCompare(b.url));
+}
+// Avisos de renderizado como problemas de la lista, con su «qué hacer»
+const renderNames = { ok: 'Correcto', aviso: 'Revisar', problema: 'Problema', error: 'No se pudo comprobar' };
+function renderIssues(g) {
+  return g.findings.map(f => ({
+    id: 'render:' + f.title, category: 'render', title: f.title, value: f.value, score: f.level === 'problema' ? 0 : 50,
+    action: renderActions[f.title] || '', why: '', where: f.where || [], impact: f.level === 'problema' ? 40 : 15
+  }));
+}
+const renderActions = {
+  'La URL está bloqueada para Googlebot en robots.txt': 'Si la URL debe posicionar, quita o ajusta la regla Disallow indicada en robots.txt. Si no debe indexarse, usa noindex en lugar de bloquearla (si está bloqueada, Google no puede ver el noindex).',
+  'Recursos necesarios para renderizar bloqueados por robots.txt': 'Permite a Googlebot los archivos indicados en «Dónde»: quita o ajusta la regla Disallow (p. ej. añade «Allow: /wp-content/» o «Allow: /*.js» y «Allow: /*.css»). Sin ellos Google puede ver la página rota o sin contenido. Si el recurso es de otro dominio, depende del robots.txt de ese dominio.',
+  'robots.txt no disponible': 'Haz que /robots.txt responda con 200 (o 404 si no lo usas). Si responde con error 5xx, Google puede dejar de rastrear el sitio temporalmente.',
+  'La meta robots cambia con JavaScript': 'Pon la meta robots definitiva en el HTML que envía el servidor. Si el HTML inicial lleva noindex, Google puede no llegar a renderizar la página y la descarta aunque el JavaScript lo quite.',
+  'La canonical solo aparece con JavaScript': 'Incluye la canonical en el HTML que envía el servidor (desde el plugin SEO o la plantilla), no la añadas con JavaScript o con Tag Manager.',
+  'La canonical cambia con JavaScript': 'Deja una sola canonical, la correcta, en el HTML del servidor y quita el script que la modifica. Si las dos versiones no coinciden, Google puede ignorar ambas.',
+  'El título solo aparece con JavaScript': 'Genera el <title> en el servidor (plantilla o plugin SEO) para que esté en el HTML inicial.',
+  'El H1 solo aparece con JavaScript': 'Haz que el H1 esté en el HTML que envía el servidor; revisa si lo pinta un bloque, slider o widget que carga con JavaScript.',
+  'Enlaces internos que solo aparecen con JavaScript': 'Haz que el menú y los enlaces importantes estén en el HTML del servidor como <a href>. Si los genera JavaScript (menús, widgets, «cargar más»), Google los descubre más tarde o no los descubre.',
+  'Texto que solo aparece con JavaScript': 'Haz que el contenido principal esté en el HTML que envía el servidor (renderizado en servidor o HTML estático). Si depende de JavaScript, su indexación depende de que Google renderice bien la página. Si es intencionado, compruébalo en la Inspección de URLs de Search Console.'
+};
+async function collectRender(key) {
+  if ([...audits.values()].some(a => a.running && a.key === key)) throw Error('Espera a que termine la auditoría: comprobar el renderizado a la vez falsearía las mediciones de rendimiento.');
+  if (!collecting.has('render:' + key)) {
+    const job = (async () => {
+      const dir = auditDir(key);
+      const reports = await Promise.all((await findReports(join(dir, 'reports'))).map(f => readReport(f).catch(() => null)));
+      await render.collect(dir, reports.filter(Boolean));
+    })().finally(() => collecting.delete('render:' + key));
+    collecting.set('render:' + key, job);
+  }
+  return collecting.get('render:' + key);
 }
 async function collectField(key) {
   // una sola consulta en curso por auditoría
@@ -154,12 +197,14 @@ async function collectField(key) {
 // Gravedad: pérdida de puntuación ponderada (más peso a rendimiento y SEO)
 const weights = { performance: 0.4, seo: 0.3, accessibility: 0.2, 'best-practices': 0.1 };
 // Si hay datos reales de la propia URL, las Core Web Vitals suspendidas suben la gravedad
-function priority(scores, field) {
+// Un problema de renderizado para Google sube la prioridad (indexación en riesgo)
+function priority(scores, field, renderStatus) {
   const values = Object.values(scores).filter(v => v != null);
   const vitals = field && field.scope !== 'origin' ?['lcp', 'inp', 'cls'].map(id => field.metrics[id]?.rating).filter(Boolean) : [];
   const severity = Math.round(Object.entries(weights).reduce((t, [id, w]) => t + w * (100 - (scores[id] ?? 100)), 0)
-    + vitals.reduce((t, r) => t + (r === 'poor' ? 10 : r === 'needs' ? 4 : 0), 0));
-  const level = values.some(v => v < 50) || vitals.includes('poor') || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
+    + vitals.reduce((t, r) => t + (r === 'poor' ? 10 : r === 'needs' ? 4 : 0), 0)
+    + (renderStatus === 'problema' ? 15 : renderStatus === 'aviso' ? 5 : 0));
+  const level = values.some(v => v < 50) || vitals.includes('poor') || renderStatus === 'problema' || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
   return { severity, level };
 }
 // Auditorías suspendidas con qué hacer, por qué y dónde (recursos o elementos
@@ -235,7 +280,8 @@ function issues(lh) {
   return out.sort((a, b) => b.impact - a.impact);
 }
 
-const catNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
+const scoreNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
+const catNames = { ...scoreNames, render: 'Renderizado para Google' };
 const levelNames = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 async function exportMarkdown(key) {
   const reports = await resultReports(key);
@@ -264,7 +310,7 @@ async function exportMarkdown(key) {
     '## URLs por prioridad', ''
   ];
   for (const r of reports) {
-    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field, !!originField), '');
+    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(scoreNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field, !!originField), '');
     lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
@@ -308,7 +354,7 @@ async function exportUrlMarkdown(key, url) {
     `- Fecha: ${r.fetchTime ? new Date(r.fetchTime).toLocaleString('es-ES') : '—'}`,
     `- Dispositivo: ${r.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
     `- Prioridad: ${levelNames[r.level]} (gravedad ${r.severity})`,
-    `- Puntuaciones: ` + Object.entries(catNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '),
+    `- Puntuaciones: ` + Object.entries(scoreNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '),
     ...fieldLine(r.field), '',
     ...claudeBrief([
       'Explica en 2-3 frases el estado de la página.',
@@ -322,10 +368,11 @@ async function exportUrlMarkdown(key, url) {
 async function exportCsv(key) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const vitals = ['lcp', 'inp', 'cls'];
-  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(catNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Problemas', 'Principales problemas']];
-  for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(catNames).map(id => r.scores[id]),
+  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(scoreNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Renderizado para Google', 'Problemas', 'Principales problemas']];
+  for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(scoreNames).map(id => r.scores[id]),
     ...vitals.map(id => r.field?.metrics[id] ? `${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})` : ''),
     r.field ? ({ url: 'URL', 'url-all': 'URL (móvil + escritorio)', origin: 'Dominio' }[r.field.scope]) : r.field === null ? 'Sin datos' : '',
+    r.render ? renderNames[r.render.status] : '',
     r.issues.length, r.issues.slice(0, 5).map(i => i.title).join(' | ')]);
   return '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
 }
@@ -372,6 +419,7 @@ const server = http.createServer(async (req, res) => {
       return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
+    if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
     if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status() });
     if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status() }); }

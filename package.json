@@ -9,7 +9,9 @@
     "test": "node --test"
   },
   "dependencies": {
-    "@unlighthouse/cli": "0.19.1"
+    "@unlighthouse/cli": "0.19.1",
+    "chrome-launcher": "1.2.2",
+    "puppeteer-core": "25.16.0"
   },
   "engines": {
     "node": ">=22.18.0"

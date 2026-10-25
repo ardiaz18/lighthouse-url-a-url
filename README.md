@@ -8,6 +8,7 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 - Muestra el **informe Lighthouse completo de cada URL**, en español.
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
 - Muestra los **datos de usuarios reales** (Core Web Vitals de CrUX, los mismos de PageSpeed Insights) junto a los de laboratorio, con una clave gratuita de Google.
+- Opcional: **Renderizado para Google**, que avisa de recursos bloqueados por robots.txt y de contenido que solo aparece con JavaScript.
 - **Analizar con Claude**: descarga un .md con los datos y las instrucciones de análisis ya escritas; basta con soltarlo en una conversación de Claude.
 - Detalla cada problema: qué hacer, por qué y dónde (recursos o elementos concretos).
 - Analizar con Claude también para cada URL, y exportación en CSV para hojas de cálculo.
@@ -56,6 +57,15 @@ Necesita una clave gratuita de Google Cloud (sin tarjeta). Cada persona usa la s
 5. En la herramienta, pulsa el icono de **Ajustes** (⚙), pega la clave y guarda.
 
 La clave se guarda solo en tu equipo (`settings.json`, que no se sube a git). En un servidor, usa la variable de entorno `CRUX_API_KEY`. Los datos se consultan una vez por auditoría y se guardan con ella. El límite gratuito es de 150 consultas por minuto.
+
+## Renderizado para Google (opcional)
+
+Marca **Comprobar renderizado para Google** al lanzar una auditoría, o pulsa el botón del mismo nombre en una ya hecha. Al terminar la auditoría (para no falsear las mediciones de rendimiento), comprueba en cada URL:
+
+- **Recursos bloqueados por robots.txt:** JS, CSS y peticiones de datos que Googlebot no puede descargar según las reglas de Google (grupo de Googlebot o `*`, la regla más larga gana). Sin ellos Google puede ver la página rota.
+- **HTML inicial frente a renderizado:** si la meta robots, la canonical, el título, el H1, los enlaces internos o el texto solo aparecen (o cambian) al ejecutar JavaScript.
+
+Son comprobaciones de hechos, no la vista real de Google: no detecta bloqueos por IP ni contenido oculto por CSS, ni sabe qué ha indexado Google. Ante un aviso, confírmalo en la Inspección de URLs de Search Console. Añade unos segundos por URL.
 
 ## Limitaciones
 

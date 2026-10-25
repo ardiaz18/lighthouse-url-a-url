@@ -2,7 +2,7 @@
 
 *Rendimiento, renderizado e indexación, URL a URL*
 
-Herramienta local para auditar un sitio completo con **Google Lighthouse**, página a página, usando el motor [Unlighthouse](https://github.com/harlan-zw/unlighthouse) sin modificar sus resultados.
+Herramienta local de auditoría de SEO técnico, URL a URL: **rendimiento** (Google Lighthouse con el motor [Unlighthouse](https://github.com/harlan-zw/unlighthouse), sin modificar sus resultados, y Core Web Vitals de usuarios reales), **renderizado para Google** e **indexación real** con Search Console.
 
 - Rastrea el sitio (sitemap, robots.txt y enlaces internos) y ejecuta Lighthouse en cada URL, en móvil o escritorio.
 - Muestra el **informe Lighthouse completo de cada URL**, en español.

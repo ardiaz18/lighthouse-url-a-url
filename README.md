@@ -86,7 +86,7 @@ Las credenciales se guardan solo en tu equipo (`settings.json`, que no se sube a
 
 Marca **Comprobar renderizado para Google** al lanzar una auditoría, o pulsa el botón del mismo nombre en una ya hecha. Al terminar la auditoría (para no falsear las mediciones de rendimiento), comprueba en cada URL:
 
-- **Recursos bloqueados por robots.txt:** JS, CSS y peticiones de datos que Googlebot no puede descargar según las reglas de Google (grupo de Googlebot o `*`, la regla más larga gana). Sin ellos Google puede ver la página rota.
+- **Recursos bloqueados por robots.txt:** JS, CSS y peticiones de datos **del propio sitio** que Googlebot no puede descargar según las reglas de Google (los de otros dominios se ignoran: su robots.txt no depende de ti) (grupo de Googlebot o `*`, la regla más larga gana). Sin ellos Google puede ver la página rota.
 - **HTML inicial frente a renderizado:** si la meta robots, la canonical, el título, el H1, los enlaces internos o el texto solo aparecen (o cambian) al ejecutar JavaScript.
 - **Contenido oculto por CSS:** renderiza como Google (pantalla tan alta como la página, sin scroll ni clics) y mide el texto principal invisible (`opacity`, `visibility`, `display:none`). Después interactúa como una persona (ratón y rueda) para distinguir lo que **solo aparece al interactuar** —Googlebot no interactúa; causa habitual: animaciones de entrada con «Retrasar JavaScript» de WP Rocket, LiteSpeed o Perfmatters— de carruseles, pestañas y efectos. Fiabilidad media: el renderizador de Google no se puede reproducir exacto.
 

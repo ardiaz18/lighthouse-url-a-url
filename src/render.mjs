@@ -46,27 +46,19 @@ export function blockingRule(rules, url) {
   }
   return best && !best.allow ? best : null;
 }
-// Qué recursos bloqueados importan para el renderizado: los del propio sitio (JS, CSS y datos)
-// y los JS/CSS de terceros que no sean de medición o publicidad. El resto se ignora.
-const tracking = /googlesyndication|doubleclick|google-analytics|googletagmanager|googleadservices|google\.[a-z.]+\/(pagead|ads)|facebook\.(com|net)|fbcdn|connect\.facebook|clarity\.ms|hotjar|linkedin|licdn|twitter|t\.co\/|tiktok|bing\.com|pinterest|criteo|taboola|outbrain|adsrvr|hubspot|hs-analytics|segment\.(io|com)|mixpanel|amplitude|yandex|matomo|piwik|quantserve|scorecardresearch|cloudflareinsights|newrelic|nr-data|sentry|recaptcha/i;
+// Qué recursos bloqueados importan para el renderizado: solo los del propio sitio (JS, CSS y datos).
+// Los de otros dominios dependen de su robots.txt, que no se puede cambiar, y se ignoran.
 const site = host => {
   const parts = host.replace(/^www\./, '').split('.');
   return parts.slice(parts.length > 2 && parts.at(-2).length <= 3 && parts.at(-1).length === 2 ? -3 : -2).join('.');
 };
 export function blockedRelevance(pageUrl, resourceUrl, type) {
   const page = new URL(pageUrl), res = new URL(resourceUrl);
-  if (site(res.hostname) === site(page.hostname)) return 'own';
-  if ((type === 'Script' || type === 'Stylesheet') && !tracking.test(res.hostname + res.pathname)) return 'third';
-  return null;
+  return site(res.hostname) === site(page.hostname) ? 'own' : null;
 }
 function blockedFindings(pageUrl, blocked) {
-  const out = [];
-  const kind = line => blockedRelevance(pageUrl, 'https://' + line.split(' ')[0], (line.match(/\((\w+)\)/) || [])[1]);
-  const own = blocked.filter(l => kind(l) === 'own'), third = blocked.filter(l => kind(l) === 'third');
-  const n = l => `${l.length} recurso${l.length > 1 ? 's' : ''}`;
-  if (own.length) out.push({ level: 'problema', title: 'Recursos del propio sitio bloqueados por robots.txt', value: n(own), where: own });
-  if (third.length) out.push({ level: 'aviso', title: 'Scripts o estilos de otros dominios bloqueados por robots.txt', value: n(third), where: third });
-  return out;
+  const own = blocked.filter(line => blockedRelevance(pageUrl, 'https://' + line.split(' ')[0], (line.match(/\((\w+)\)/) || [])[1]));
+  return own.length ? [{ level: 'problema', title: 'Recursos del propio sitio bloqueados por robots.txt', value: `${own.length} recurso${own.length > 1 ? 's' : ''}`, where: own }] : [];
 }
 // Auditorías anteriores guardaban todos los recursos bloqueados juntos: se reclasifican al leerlas
 const oldBlockedTitle = 'Recursos necesarios para renderizar bloqueados por robots.txt';
@@ -156,7 +148,7 @@ export async function checkUrl(browser, url, requests) {
   if (pageRule) add('problema', 'La URL está bloqueada para Googlebot en robots.txt', `Disallow: ${pageRule.path}`);
   const blocked = [];
   for (const r of requests.filter(r => critical.has(r.resourceType) && /^https?:/.test(r.url))) {
-    if (!blockedRelevance(url, r.url, r.resourceType)) continue; // medición, publicidad y peticiones a terceros: no afectan al renderizado
+    if (!blockedRelevance(url, r.url, r.resourceType)) continue; // recursos de otros dominios: su robots.txt no depende de ti
     const rule = blockingRule((await robotsFor(new URL(r.url).origin)).rules, r.url);
     if (rule) blocked.push(`${r.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 100)} (${r.resourceType}) — Disallow: ${rule.path}`);
   }

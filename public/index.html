@@ -90,7 +90,7 @@ ol.issues .why{color:var(--ink-3)}
 .close-issues{margin-top:1rem;position:sticky;left:1.25rem}
 .nav-icons button{display:grid;place-items:center;width:38px;height:38px;border:1px solid var(--rule);border-radius:10px;color:var(--ink);background:var(--white);cursor:pointer;padding:0}
 .nav-icons button:hover{border-color:var(--ink);color:var(--coral-h)}
-dialog{border:1px solid var(--rule);border-radius:16px;padding:1.5rem;max-width:min(32rem,calc(100vw - 2rem));color:var(--ink-2);font-family:var(--f-q)}
+dialog{max-height:calc(100vh - 2rem);overflow:auto;border:1px solid var(--rule);border-radius:16px;padding:1.5rem;max-width:min(32rem,calc(100vw - 2rem));color:var(--ink-2);font-family:var(--f-q)}
 dialog::backdrop{background:rgba(13,13,13,.35)}
 dialog h3{font-family:var(--f-j);font-size:.95rem;color:var(--ink);margin:1rem 0 .3rem}
 dialog label{margin-top:.8rem}
@@ -180,15 +180,32 @@ footer a{color:var(--ink)}
   <div class="actions">
     <button class="btn" id="crux-save">Guardar</button>
     <button class="btn-outline" id="crux-remove" hidden>Quitar clave</button>
-    <button class="btn-outline" onclick="this.closest('dialog').close()">Cerrar</button>
   </div>
+  <h3>Google Search Console</h3>
+  <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad. <a href="https://github.com/ardiaz18/site-speed-report#google-search-console" target="_blank" rel="noopener">Cómo configurarlo</a>.</p>
+  <p class="msg" id="gsc-status" role="status"></p>
+  <div id="gsc-forms">
+    <details open>
+      <summary>Con tu cuenta de Google</summary>
+      <label>ID de cliente OAuth<input id="gsc-client-id" autocomplete="off" spellcheck="false" placeholder="….apps.googleusercontent.com"></label>
+      <label>Secreto del cliente<input type="password" id="gsc-client-secret" autocomplete="off" spellcheck="false"></label>
+      <div class="actions"><button class="btn" id="gsc-connect">Conectar con Google</button></div>
+    </details>
+    <details>
+      <summary>Con cuenta de servicio (recomendado para equipos o servidor)</summary>
+      <label>Contenido del archivo .json de la cuenta de servicio<textarea id="gsc-service" spellcheck="false" placeholder="{ &quot;type&quot;: &quot;service_account&quot;, … }"></textarea></label>
+      <div class="actions"><button class="btn" id="gsc-service-save">Guardar cuenta de servicio</button></div>
+    </details>
+  </div>
+  <div class="actions"><button class="btn-outline" id="gsc-disconnect" hidden>Desconectar Search Console</button></div>
+  <div class="actions" style="margin-top:1.2rem"><button class="btn-outline" onclick="this.closest('dialog').close()">Cerrar</button></div>
 </dialog>
 <footer><div class="wrap">Motor de auditoría: <a href="https://github.com/harlan-zw/unlighthouse" target="_blank" rel="noopener">Unlighthouse</a> (MIT, © Harlan Wilton y colaboradores) y Google Lighthouse, sin modificar. Herramienta local: no exponer públicamente.</div></footer>
 <script>
 const $ = s => document.querySelector(s);
 const labels = { starting: 'Iniciando', scanning: 'Analizando', finished: 'Terminada', stopped: 'Detenida', failed: 'Error' };
 const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad'], ['best-practices', 'Buenas prácticas'], ['seo', 'SEO']];
-const catLabel = { ...Object.fromEntries(cats), render: 'Renderizado para Google' };
+const catLabel = { ...Object.fromEntries(cats), render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const openIssues = new Set();
 const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
 let timer, shownKey, settings = {}, resultsMeta = [];
@@ -264,21 +281,30 @@ async function showResult(key, quiet) {
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
         settings.crux?.enabled ? null : el('button', { class: 'btn-link', onclick: openSettings }, 'Activar')),
+      settings.gsc?.connected ? el('th', { title: 'Datos reales de Google Search Console: indexación, último rastreo y si Googlebot pudo descargar la URL' }, 'Google') : null,
       showRender ? el('th', { title: 'Recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript y contenido oculto por CSS o que solo aparece al interactuar. Imita el renderizado de Google; no es su vista real.' }, 'Renderizado Google') : null,
       el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
     el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },
       el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),
       el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
       el('td', {}, fieldCell(r)),
+      settings.gsc?.connected ? el('td', {}, googleCell(r)) : null,
       showRender ? el('td', {}, renderCell(r)) : null,
       el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
       el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
         el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL con las instrucciones para Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url)) }, 'Claude'))),
-      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: String(9 + (showRender ? 1 : 0)) }, issueList(r.issues),
+      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: String(9 + (showRender ? 1 : 0) + (settings.gsc?.connected ? 1 : 0)) }, issueList(r.issues),
         el('button', { class: 'btn-outline close-issues', onclick: closeIssues }, 'Cerrar ▴'))) : null
     ].filter(Boolean))))
     : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
   if (!quiet) $('#reports').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  // Search Console para las URLs que aún no lo tengan
+  if (settings.gsc?.connected && !googleLoading.has(key) && !googleError[key] && reports.some(r => r.google === undefined)) {
+    googleLoading.add(key);
+    fetch('/api/google/' + key, { method: 'POST' }).then(async res => { if (!res.ok) googleError[key] = (await res.json()).error; })
+      .catch(err => { googleError[key] = err.message; })
+      .finally(() => { googleLoading.delete(key); if (shownKey === key) showResult(key, true); });
+  }
   // comprobación de renderizado pendiente (auditorías marcadas que aún no la tienen)
   if (meta?.render && reports.some(r => !r.render) && !renderLoading.has(key) && !renderError[key]) checkRender(key);
   // consulta CrUX para las URLs que aún no lo tengan (se guarda con la auditoría)
@@ -343,7 +369,50 @@ function originNote(reports) {
 }
 // Ajustes: clave de CrUX guardada solo en este equipo
 async function loadSettings() { settings = await json('/api/settings'); }
+// Search Console
+const googleLoading = new Set(), googleError = {};
+const googleChip = { indexed: ['Indexada', 's-good'], notIndexed: ['No indexada', 's-bad'], blocked: ['No descargada', 's-bad'], noAccess: ['Sin acceso', 'meta'], error: ['Error', 'meta'] };
+function googleCell(r) {
+  if (!r.google) return el('span', { class: 'meta', title: googleError[shownKey] || '' }, googleError[shownKey] ? 'Error ⓘ' : 'Consultando…');
+  const [text, cls] = googleChip[r.google.status];
+  const detail = r.google.noAccess ? 'Tu cuenta no tiene acceso a esta web en Search Console' : r.google.error
+    || [r.google.coverage, r.google.lastCrawl ? 'Último rastreo: ' + new Date(r.google.lastCrawl).toLocaleDateString('es-ES') : 'Sin rastrear'].filter(Boolean).join(' · ');
+  return el('span', { class: cls === 'meta' ? 'meta' : 'score ' + cls, title: detail }, text);
+}
+function showGsc() {
+  const g = settings.gsc || {};
+  $('#gsc-status').textContent = g.connected ? 'Conectado' + (g.account ? ' como ' + g.account : '') + (g.mode === 'service' ? ' (cuenta de servicio)' : '') + '.' : 'Sin conectar.';
+  $('#gsc-forms').hidden = !!g.connected;
+  $('#gsc-disconnect').hidden = !g.connected;
+}
+async function gscRequest(path, body, pending) {
+  $('#gsc-status').textContent = pending;
+  try {
+    return await json(path, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  } catch (err) { $('#gsc-status').textContent = 'Error: ' + err.message; return null; }
+}
+$('#gsc-connect').addEventListener('click', async () => {
+  const data = await gscRequest('/api/gsc/connect', { clientId: $('#gsc-client-id').value, clientSecret: $('#gsc-client-secret').value }, 'Abriendo Google…');
+  if (data) { window.open(data.url, '_blank'); $('#gsc-status').textContent = 'Autoriza el acceso en la pestaña de Google y vuelve aquí.'; }
+});
+$('#gsc-service-save').addEventListener('click', async () => {
+  const data = await gscRequest('/api/gsc/service', { json: $('#gsc-service').value }, 'Comprobando la cuenta de servicio…');
+  if (data) {
+    settings.gsc = data.gsc; showGsc();
+    $('#gsc-status').textContent += ' Tiene acceso a ' + data.properties + (data.properties === 1 ? ' propiedad.' : ' propiedades.');
+    if (shownKey) showResult(shownKey, true);
+  }
+});
+$('#gsc-disconnect').addEventListener('click', async () => {
+  const data = await gscRequest('/api/gsc/disconnect', {}, 'Desconectando…');
+  if (data) { settings.gsc = data.gsc; showGsc(); if (shownKey) showResult(shownKey, true); }
+});
+// al volver de la pestaña de Google, comprueba si ya está conectado
+const refreshGsc = async () => { await loadSettings(); showGsc(); if (settings.gsc?.connected && shownKey) showResult(shownKey, true); };
+addEventListener('message', e => { if (e.data === 'gsc-connected') refreshGsc(); });
+addEventListener('focus', () => { if ($('#settings').open && !settings.gsc?.connected) refreshGsc(); });
 function openSettings() {
+  showGsc();
   $('#crux-status').textContent = settings.crux?.enabled ? 'Datos de usuarios reales activados.' : 'Sin clave: la columna «Usuarios reales» no muestra datos.';
   $('#crux-key').value = '';
   $('#crux-remove').hidden = !settings.crux?.enabled || settings.crux.fromEnv;

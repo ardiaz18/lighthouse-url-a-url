@@ -8,6 +8,7 @@ Herramienta local para auditar un sitio completo con **Google Lighthouse**, pág
 - Muestra el **informe Lighthouse completo de cada URL**, en español.
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
 - Muestra los **datos de usuarios reales** (Core Web Vitals de CrUX, los mismos de PageSpeed Insights) junto a los de laboratorio, con una clave gratuita de Google.
+- Opcional: **Google Search Console** (datos reales de Google): si cada URL está indexada, si Googlebot pudo descargarla (bloqueos de firewall o CDN), la canonical que eligió y su último rastreo.
 - Opcional: **Renderizado para Google**, que avisa de recursos bloqueados por robots.txt y de contenido que solo aparece con JavaScript.
 - **Analizar con Claude**: descarga un .md con los datos y las instrucciones de análisis ya escritas; basta con soltarlo en una conversación de Claude.
 - Detalla cada problema: qué hacer, por qué y dónde (recursos o elementos concretos).
@@ -57,6 +58,27 @@ Necesita una clave gratuita de Google Cloud (sin tarjeta). Cada persona usa la s
 5. En la herramienta, pulsa el icono de **Ajustes** (⚙), pega la clave y guarda.
 
 La clave se guarda solo en tu equipo (`settings.json`, que no se sube a git). En un servidor, usa la variable de entorno `CRUX_API_KEY`. Los datos se consultan una vez por auditoría y se guardan con ella. El límite gratuito es de 150 consultas por minuto.
+
+## Google Search Console
+
+Con Search Console conectado aparece la columna **Google**: el estado real de cada URL según Google (API de Inspección de URLs). Detecta lo que no se puede simular: si la URL está indexada y por qué no, si **Googlebot no pudo descargarla** en su último rastreo (403 por firewall o CDN, errores 5xx, robots.txt…), si Google ha elegido otra canonical y cuándo la rastreó. Solo funciona con webs a las que tengas acceso en Search Console, hasta 2.000 URLs al día por propiedad. Los resultados se guardan con la auditoría.
+
+Se configura en el mismo proyecto de Google Cloud que la clave de CrUX. Primero, en **APIs y servicios → Biblioteca**, habilita **Google Search Console API**. Después elige una opción:
+
+**Con tu cuenta de Google** (uso personal):
+
+1. En **APIs y servicios → Pantalla de consentimiento de OAuth**, configúrala como **Externa** y añade tu correo.
+2. En **Público** (o «Estado de publicación»), pulsa **Publicar aplicación** para pasarla a **En producción**. Si se queda «En pruebas», Google desconecta la herramienta cada 7 días. Al conectar verás el aviso «Google no ha verificado esta aplicación»: es tu propia app, pulsa *Configuración avanzada → Ir a…*.
+3. En **Credenciales → Crear credenciales → ID de cliente de OAuth**, elige **Aplicación de escritorio**.
+4. En la herramienta, **Ajustes (⚙) → Google Search Console → Con tu cuenta de Google**: pega el ID de cliente y el secreto y pulsa **Conectar con Google**.
+
+**Con cuenta de servicio** (recomendado para equipos y para el servidor; no caduca):
+
+1. En **IAM y administración → Cuentas de servicio**, crea una cuenta y, en **Claves → Agregar clave → JSON**, descarga su archivo.
+2. En Search Console, en cada propiedad: **Configuración → Usuarios y permisos → Añadir usuario**, con el correo de la cuenta de servicio (`…@….iam.gserviceaccount.com`) y permiso **Restringido**.
+3. En la herramienta, **Ajustes → Google Search Console → Con cuenta de servicio**: pega el contenido del .json y guarda.
+
+Las credenciales se guardan solo en tu equipo (`settings.json`, que no se sube a git).
 
 ## Renderizado para Google (opcional)
 

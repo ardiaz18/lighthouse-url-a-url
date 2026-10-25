@@ -2,6 +2,7 @@ import http from 'node:http';
 import { actions, metricSources } from './actions.mjs';
 import { createCrux } from './crux.mjs';
 import { createRender } from './render.mjs';
+import { createGsc, fetchStates, indexingStates } from './gsc.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat, writeFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -18,6 +19,7 @@ const mime = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': '
 
 const crux = createCrux(root);
 const render = createRender();
+const gsc = createGsc(root);
 const collecting = new Map();
 const audits = new Map();
 let nextId = 1;
@@ -142,15 +144,41 @@ async function resultReports(key) {
   // datos de usuarios reales: field queda undefined si aún no se han consultado y null si Google no tiene datos
   const field = await crux.cached(dir);
   const rendered = await render.cached(dir);
+  const google = await gsc.cached(dir);
   const merged = reports.map(r => {
     const f = field && r.url in field ? field[r.url] : undefined;
     const g = rendered?.[r.url] && { status: rendered[r.url].status, error: rendered[r.url].error, findings: rendered[r.url].findings };
-    if (f === undefined && !g) return r;
-    return { ...r, ...(f !== undefined && { field: f }), ...(g && { render: g, issues: [...renderIssues(g), ...r.issues] }), ...priority(r.scores, f, g?.status) };
+    const q = google?.[r.url] && { ...google[r.url], status: googleStatus(google[r.url]) };
+    if (f === undefined && !g && !q) return r;
+    return { ...r, ...(f !== undefined && { field: f }), ...(q && { google: q }), ...(g && { render: g }),
+      issues: [...(q ? googleIssues(q) : []), ...(g ? renderIssues(g) : []), ...r.issues], ...priority(r.scores, f, g?.status, q?.status) };
   });
   return merged.sort((a, b) => b.severity - a.severity || a.url.localeCompare(b.url));
 }
 // Avisos de renderizado como problemas de la lista, con su «qué hacer»
+// Search Console: estado real de cada URL en Google
+const googleNames = { indexed: 'Indexada', notIndexed: 'No indexada', blocked: 'Google no pudo descargarla', noAccess: 'Sin acceso en Search Console', error: 'Error al consultar' };
+function googleStatus(q) {
+  if (q.noAccess) return 'noAccess';
+  if (q.error) return 'error';
+  if (q.fetch && q.fetch !== 'SUCCESSFUL' && q.fetch !== 'PAGE_FETCH_STATE_UNSPECIFIED') return 'blocked';
+  return q.verdict === 'PASS' ? 'indexed' : 'notIndexed';
+}
+function googleIssues(q) {
+  const out = [], add = (level, title, value, action, where = []) => out.push({ id: 'google:' + title, category: 'google', title, value, action, why: '', where, score: level === 'problema' ? 0 : 50, impact: level === 'problema' ? 45 : 15 });
+  if (q.status === 'blocked') add('problema', 'Googlebot no pudo descargarla en su último rastreo', fetchStates[q.fetch] || q.fetch,
+    q.fetch === 'ACCESS_FORBIDDEN' || q.fetch === 'ACCESS_DENIED' ? 'El servidor, el firewall o la CDN (Cloudflare, Wordfence, el hosting…) rechaza a Googlebot. Revisa las reglas de bloqueo por bots, país o IP y permite el user-agent y los rangos de IP oficiales de Googlebot. Después, solicita la indexación en Search Console.'
+    : q.fetch === 'SERVER_ERROR' ? 'El servidor falló cuando Google la visitó (5xx). Revisa los registros del servidor, la carga del hosting y los límites de peticiones; si se repite, Google rastreará menos el sitio.'
+    : 'Corrige la causa indicada y solicita de nuevo la indexación en la Inspección de URLs de Search Console.');
+  if (q.status === 'notIndexed') add('problema', 'Google no la tiene indexada', q.coverage || 'Sin indexar',
+    /noindex|excluida/i.test(q.coverage || '') ? 'Si debe posicionar, quita el noindex y solicita la indexación.'
+    : /rastreada/i.test(q.coverage || '') ? 'Google la conoce y la ha rastreado pero decidió no indexarla: suele indicar contenido poco útil, duplicado o débil frente a otras URLs del sitio. Mejora el contenido y el enlazado interno, y revisa que no compita con otra URL.'
+    : /descubierta|desconocida/i.test(q.coverage || '') ? 'Google aún no la ha rastreado. Enlázala desde páginas importantes, inclúyela en el sitemap y solicita la indexación.'
+    : 'Revisa el motivo en la Inspección de URLs de Search Console y solicita la indexación cuando esté corregido.');
+  if (q.indexing && indexingStates[q.indexing]) add('aviso', 'Google detecta un bloqueo de indexación', indexingStates[q.indexing], 'Si la URL debe posicionar, quita ese bloqueo. Si es intencionado, ignora este aviso.');
+  if (q.googleCanonical && q.userCanonical && q.googleCanonical !== q.userCanonical) add('aviso', 'Google ha elegido otra canonical', `Tuya: ${q.userCanonical} · Google: ${q.googleCanonical}`, 'Google ignora tu canonical y prefiere otra URL. Revisa si las dos tienen el mismo contenido, unifica enlaces internos y sitemap hacia la versión que quieres y comprueba redirecciones.');
+  return out;
+}
 const renderNames = { ok: 'Correcto', aviso: 'Revisar', problema: 'Problema', error: 'No se pudo comprobar' };
 function renderIssues(g) {
   return g.findings.map(f => ({
@@ -185,6 +213,16 @@ async function collectRender(key) {
   }
   return collecting.get('render:' + key);
 }
+async function collectGoogle(key) {
+  if (!collecting.has('google:' + key)) {
+    const job = (async () => {
+      const reports = await resultReports(key);
+      await gsc.collect(auditDir(key), reports.map(r => r.url));
+    })().finally(() => collecting.delete('google:' + key));
+    collecting.set('google:' + key, job);
+  }
+  return collecting.get('google:' + key);
+}
 async function collectField(key) {
   // una sola consulta en curso por auditoría
   if (!collecting.has(key)) {
@@ -201,13 +239,14 @@ async function collectField(key) {
 const weights = { performance: 0.4, seo: 0.3, accessibility: 0.2, 'best-practices': 0.1 };
 // Si hay datos reales de la propia URL, las Core Web Vitals suspendidas suben la gravedad
 // Un problema de renderizado para Google sube la prioridad (indexación en riesgo)
-function priority(scores, field, renderStatus) {
+function priority(scores, field, renderStatus, googleStatus) {
   const values = Object.values(scores).filter(v => v != null);
   const vitals = field && field.scope !== 'origin' ?['lcp', 'inp', 'cls'].map(id => field.metrics[id]?.rating).filter(Boolean) : [];
   const severity = Math.round(Object.entries(weights).reduce((t, [id, w]) => t + w * (100 - (scores[id] ?? 100)), 0)
     + vitals.reduce((t, r) => t + (r === 'poor' ? 10 : r === 'needs' ? 4 : 0), 0)
-    + (renderStatus === 'problema' ? 15 : renderStatus === 'aviso' ? 5 : 0));
-  const level = values.some(v => v < 50) || vitals.includes('poor') || renderStatus === 'problema' || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
+    + (renderStatus === 'problema' ? 15 : renderStatus === 'aviso' ? 5 : 0)
+    + (googleStatus === 'notIndexed' || googleStatus === 'blocked' ? 20 : 0));
+  const level = values.some(v => v < 50) || vitals.includes('poor') || renderStatus === 'problema' || googleStatus === 'notIndexed' || googleStatus === 'blocked' || severity >= 25 ? 'alta' : values.some(v => v < 90) || vitals.includes('needs') ? 'media' : 'baja';
   return { severity, level };
 }
 // Auditorías suspendidas con qué hacer, por qué y dónde (recursos o elementos
@@ -284,7 +323,7 @@ function issues(lh) {
 }
 
 const scoreNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
-const catNames = { ...scoreNames, render: 'Renderizado para Google' };
+const catNames = { ...scoreNames, render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const levelNames = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 async function exportMarkdown(key) {
   const reports = await resultReports(key);
@@ -313,7 +352,7 @@ async function exportMarkdown(key) {
     '## URLs por prioridad', ''
   ];
   for (const r of reports) {
-    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(scoreNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field, !!originField), '');
+    lines.push(`### ${r.url}`, '', `Prioridad: **${levelNames[r.level]}** (gravedad ${r.severity}) · ` + Object.entries(scoreNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '), ...fieldLine(r.field, !!originField), ...googleLine(r.google), '');
     lines.push(...issueLines(r.issues.slice(0, 10), 2), '');
   }
   return lines.join('\n');
@@ -325,7 +364,7 @@ function claudeBrief(tasks) {
     'Actúa como consultor/a senior de SEO técnico y rendimiento web. Este archivo contiene datos de Google Lighthouse exportados por la herramienta «Site Speed Report». Analízalos y responde en español:', '',
     ...tasks.map((t, n) => `${n + 1}. ${t}`), '',
     'Básate solo en los datos de este archivo; si algo requiere comprobarse en la web, dilo. «Qué hacer» y «Dónde» son pistas de la herramienta: concrétalas para este caso.',
-    'Las puntuaciones de Lighthouse son de laboratorio (una carga simulada). Cuando haya datos de «Usuarios reales» (CrUX), dales prioridad: son las Core Web Vitals que Google usa como señal, y contrástalos con el laboratorio para explicar diferencias.', '',
+    'Las puntuaciones de Lighthouse son de laboratorio (una carga simulada). Cuando haya datos de «Usuarios reales» (CrUX), dales prioridad: son las Core Web Vitals que Google usa como señal, y contrástalos con el laboratorio para explicar diferencias. Los datos de «Google (Search Console)» son el estado real de indexación y rastreo según Google: son los más fiables y tienen prioridad sobre las comprobaciones de «Renderizado para Google», que son una simulación.', '',
     '---', ''
   ];
 }
@@ -340,6 +379,10 @@ function fieldLine(f, originShownAbove) {
   const scope = f.scope === 'origin' ? ', datos de todo el dominio: esta URL no tiene tráfico suficiente'
     : f.scope === 'url-all' ? ', móvil y escritorio juntos: por separado no hay tráfico suficiente' : '';
   return [`- Usuarios reales (CrUX, percentil 75, 28 días${scope}): ${values}`];
+}
+function googleLine(q) {
+  if (!q || q.status === 'noAccess' || q.status === 'error') return [];
+  return [`- Google (Search Console, datos reales): ${googleNames[q.status]}${q.coverage ? ' — ' + q.coverage : ''}${q.lastCrawl ? ' · último rastreo ' + new Date(q.lastCrawl).toLocaleDateString('es-ES') + (q.crawledAs ? ' (' + (q.crawledAs === 'MOBILE' ? 'Googlebot móvil' : 'Googlebot escritorio') + ')' : '') : ' · sin rastrear'}`];
 }
 function issueLines(list, maxWhere) {
   return list.flatMap(i => [
@@ -358,7 +401,7 @@ async function exportUrlMarkdown(key, url) {
     `- Dispositivo: ${r.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
     `- Prioridad: ${levelNames[r.level]} (gravedad ${r.severity})`,
     `- Puntuaciones: ` + Object.entries(scoreNames).map(([id, n]) => `${n} ${r.scores[id] ?? '–'}`).join(' · '),
-    ...fieldLine(r.field), '',
+    ...fieldLine(r.field), ...googleLine(r.google), '',
     ...claudeBrief([
       'Explica en 2-3 frases el estado de la página.',
       'Para cada problema relevante, di exactamente qué cambiar, en qué recurso o elemento (usa los datos de «Dónde»), quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.',
@@ -371,11 +414,12 @@ async function exportUrlMarkdown(key, url) {
 async function exportCsv(key) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const vitals = ['lcp', 'inp', 'cls'];
-  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(scoreNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Renderizado para Google', 'Problemas', 'Principales problemas']];
+  const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(scoreNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Renderizado para Google', 'Google (Search Console)', 'Cobertura en Google', 'Último rastreo de Google', 'Problemas', 'Principales problemas']];
   for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(scoreNames).map(id => r.scores[id]),
     ...vitals.map(id => r.field?.metrics[id] ? `${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})` : ''),
     r.field ? ({ url: 'URL', 'url-all': 'URL (móvil + escritorio)', origin: 'Dominio' }[r.field.scope]) : r.field === null ? 'Sin datos' : '',
     r.render ? renderNames[r.render.status] : '',
+    r.google ? googleNames[r.google.status] : '', r.google?.coverage || '', r.google?.lastCrawl ? new Date(r.google.lastCrawl).toLocaleDateString('es-ES') : '',
     r.issues.length, r.issues.slice(0, 5).map(i => i.title).join(' | ')]);
   return '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
 }
@@ -400,6 +444,13 @@ const server = http.createServer(async (req, res) => {
   const { pathname } = new URL(req.url, 'http://x');
   const path = decodeURIComponent(pathname);
   try {
+    const query = new URL(req.url, 'http://x').searchParams;
+    if (req.method === 'GET' && path === '/' && query.has('state') && (query.has('code') || query.has('error'))) {
+      let msg = 'Search Console conectado. Ya puedes cerrar esta pestaña y volver a la herramienta.';
+      try { if (query.has('error')) throw Error('Has cancelado la autorización en Google.'); await gsc.finishAuth(query.get('state'), query.get('code')); } catch (e) { msg = 'No se pudo conectar: ' + e.message; }
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
+      return res.end(`<!doctype html><meta charset="utf-8"><title>Search Console</title><body style="font-family:sans-serif;padding:3rem;max-width:40rem"><p>${msg.replace(/</g, '&lt;')}</p><p><a href="/">Volver a la herramienta</a></p><script>window.opener && window.opener.postMessage('gsc-connected', '*')</script></body>`);
+    }
     if (req.method === 'GET' && (path === '/' || path.startsWith('/assets/'))) {
       if (await sendFile(res, join(root, 'public'), path === '/' ? 'index.html' : path)) return;
       return send(404, { error: 'No encontrado' });
@@ -424,8 +475,12 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
-    if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status() });
-    if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status() }); }
+    if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status(), gsc: await gsc.status() });
+    if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status(), gsc: await gsc.status() }); }
+    if (req.method === 'POST' && path === '/api/gsc/connect') { const b = await readJson(req); return send(200, { url: await gsc.authUrl(b.clientId?.trim(), b.clientSecret?.trim(), `http://127.0.0.1:${port}/`) }); }
+    if (req.method === 'POST' && path === '/api/gsc/service') { const n = await gsc.saveServiceAccount((await readJson(req)).json); return send(200, { properties: n, gsc: await gsc.status() }); }
+    if (req.method === 'POST' && path === '/api/gsc/disconnect') { await gsc.disconnect(); return send(200, { gsc: await gsc.status() }); }
+    if (req.method === 'POST' && path.startsWith('/api/google/')) { await collectGoogle(path.slice('/api/google/'.length)); return send(200, { ok: true }); }
     const m = path.match(/^\/api\/audits\/(\d+)(\/stop|\/log)$/);
     const audit = m && audits.get(Number(m[1]));
     if (audit && req.method === 'GET' && m[2] === '/log') return send(200, audit.log);

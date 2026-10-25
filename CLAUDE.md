@@ -6,6 +6,7 @@ Panel local (`npm run dev`, http://127.0.0.1:4173) que lanza Unlighthouse sin mo
 - `src/unlighthouse-runner.mjs`: réplica del CLI oficial; solo fija puerto interno y `locale: 'es'`.
 - `src/crux.mjs`: datos de usuarios reales (CrUX API); clave en settings.json o CRUX_API_KEY.
 - `src/render.mjs`: renderizado para Google (robots.txt de los recursos y HTML inicial frente a renderizado, con Chrome vía puppeteer-core).
+- `src/gsc.mjs`: Search Console (API de Inspección de URLs) con OAuth de escritorio o cuenta de servicio; credenciales en settings.json.
 - `src/actions.mjs`: «qué hacer» en español para las auditorías Lighthouse habituales.
 - `public/index.html`: interfaz (estilo aliciaruiz.es).
 

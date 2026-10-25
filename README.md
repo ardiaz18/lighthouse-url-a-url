@@ -104,4 +104,4 @@ Imita el renderizado de Google, pero no es su vista real: no detecta bloqueos po
 
 Motor: [Unlighthouse](https://github.com/harlan-zw/unlighthouse) (MIT, © Harlan Wilton y colaboradores) y [Google Lighthouse](https://github.com/GoogleChrome/lighthouse) (Apache-2.0), instalados como dependencias sin modificar.
 
-Autora: [Alicia Ruiz](https://aliciaruiz.es/blog/)
+Autora: [Alicia Ruiz](https://aliciaruiz.es/blog/). © 2026 Alicia Ruiz. Todos los derechos reservados: uso solo con autorización de la autora (ver `LICENSE`).

@@ -1,0 +1,13 @@
+Technical SEO Report
+Copyright (c) 2026 Alicia Ruiz (https://aliciaruiz.es). Todos los derechos reservados.
+
+Este software y su código fuente son propiedad de Alicia Ruiz. No se concede ningún
+permiso para usarlo, copiarlo, modificarlo, distribuirlo, sublicenciarlo ni ofrecerlo
+como servicio, total o parcialmente, sin autorización previa y por escrito de la autora.
+
+Componentes de terceros (se usan como dependencias, sin modificar, bajo sus licencias):
+- Unlighthouse — MIT License, (c) Harlan Wilton y colaboradores. https://github.com/harlan-zw/unlighthouse
+- Google Lighthouse — Apache License 2.0, (c) Google LLC. https://github.com/GoogleChrome/lighthouse
+- Puppeteer — Apache License 2.0, (c) Google LLC. https://github.com/puppeteer/puppeteer
+- chrome-launcher — Apache License 2.0, (c) Google LLC. https://github.com/GoogleChrome/chrome-launcher
+Los textos completos de esas licencias se incluyen en sus paquetes dentro de node_modules.

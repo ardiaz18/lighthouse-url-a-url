@@ -130,7 +130,7 @@ footer a{color:var(--ink)}
           <input type="radio" name="device" id="d-desktop" value="desktop"><label for="d-desktop">Escritorio</label>
         </div>
         <label class="check" title="Solo cambia cómo se descubren las URLs, no las puntuaciones. Actívalo en webs hechas con React, Vue o Angular."><input type="checkbox" id="javascript"> Ejecutar JavaScript al rastrear (webs SPA)</label>
-        <label class="check" title="Al terminar, comprueba en cada URL si robots.txt bloquea a Googlebot recursos necesarios (JS, CSS) y si el contenido, los enlaces, la canonical o la meta robots solo aparecen con JavaScript. Añade unos segundos por URL."><input type="checkbox" id="render"> Comprobar renderizado para Google (más lento)</label>
+        <label class="check" title="Al terminar, comprueba en cada URL: recursos bloqueados a Googlebot por robots.txt; si el contenido, los enlaces, la canonical o la meta robots solo aparecen con JavaScript; y si hay contenido oculto por CSS o que solo aparece al hacer scroll o mover el ratón (Googlebot no interactúa). Añade entre 10 y 30 segundos por URL."><input type="checkbox" id="render"> Comprobar renderizado para Google (más lento)</label>
       </div>
       <details>
         <summary>Opciones avanzadas</summary>
@@ -264,7 +264,7 @@ async function showResult(key, quiet) {
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
         settings.crux?.enabled ? null : el('button', { class: 'btn-link', onclick: openSettings }, 'Activar')),
-      showRender ? el('th', { title: 'Recursos bloqueados por robots.txt y contenido que solo aparece con JavaScript. Es una comprobación de hechos, no la vista real de Google: confírmalo en la Inspección de URLs de Search Console.' }, 'Renderizado Google') : null,
+      showRender ? el('th', { title: 'Recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript y contenido oculto por CSS o que solo aparece al interactuar. Imita el renderizado de Google; no es su vista real.' }, 'Renderizado Google') : null,
       el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
     el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },
       el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),

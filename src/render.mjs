@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { Launcher } from 'chrome-launcher';
 
-const version = 1;
+const version = 4; // 3: contenido oculto por CSS con pasada de scroll
 const mobileUA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 const critical = new Set(['Script', 'Stylesheet', 'XHR', 'Fetch']);
 
@@ -74,6 +74,46 @@ function extract(host) {
   };
 }
 
+export // --- texto del contenido principal que sigue invisible sin scroll ni clics (como renderiza Google)
+function hiddenContent() {
+  const root = document.querySelector('main, [role="main"]') || document.querySelector('article') || document.body;
+  // lo que se oculta a propósito y no es contenido principal
+  const skip = 'header, footer, nav, aside, [role="dialog"], [aria-modal="true"], [role="menu"], .menu, .sub-menu, .dropdown-menu, [class*="cookie" i], [id*="cookie" i], [class*="modal" i], [class*="popup" i], [class*="offcanvas" i], script, style, noscript, template, svg, select, option, button, form';
+  // Elementor, WPBakery (wpb_animate_when_almost_visible), Divi, AOS, WOW, Animate.css, GSAP…
+  const anim = /elementor-invisible|animat|aos-|data-aos|\bwow\b|reveal|sal-animate|data-sal|gsap|scroll-?trigger|fade-?(in|up|down|left|right)|appear|et_pb_animation/i;
+  const describe = el => el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + [...el.classList].slice(0, 3).map(c => '.' + c).join('');
+  const groups = new Map();
+  let total = 0, hidden = 0;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  for (let node; (node = walker.nextNode());) {
+    const words = node.textContent.split(/\s+/).filter(w => /\p{L}/u.test(w)).length;
+    const parent = node.parentElement;
+    if (!words || !parent || parent.closest(skip)) continue;
+    total += words;
+    if (parent.checkVisibility({ opacityProperty: true, visibilityProperty: true }) && parent.getClientRects().length) continue;
+    hidden += words;
+    // qué antecesor lo oculta y con qué regla
+    let culprit = null, reason = '';
+    for (let el = parent; el && el !== document.documentElement; el = el.parentElement) {
+      const cs = getComputedStyle(el);
+      reason = cs.display === 'none' ? 'display:none' : cs.visibility === 'hidden' ? 'visibility:hidden' : parseFloat(cs.opacity) === 0 ? 'opacity:0' : '';
+      if (reason) { culprit = el; break; }
+    }
+    // visibility se hereda: sube hasta el bloque que la declara
+    while (reason === 'visibility:hidden' && culprit.parentElement && getComputedStyle(culprit.parentElement).visibility === 'hidden') culprit = culprit.parentElement;
+    if (!culprit) continue;
+    // las clases y atributos de animación suelen estar en el elemento o en sus contenedores cercanos
+    let marks = '';
+    for (let e = culprit, i = 0; e && i < 4; e = e.parentElement, i++) marks += ' ' + [...e.attributes].map(a => a.name + '=' + a.value).join(' ');
+    if (!groups.has(culprit)) culprit.setAttribute('data-ssr-hidden', String(groups.size)); // para la pasada con scroll
+    const g = groups.get(culprit) || { id: groups.size, selector: describe(culprit), reason, animation: anim.test(marks), words: 0, text: '' };
+    g.words += words;
+    if (g.text.length < 80) g.text = (g.text + ' ' + node.textContent.trim()).trim().slice(0, 80);
+    groups.set(culprit, g);
+  }
+  return { total, hidden, groups: [...groups.values()].sort((a, b) => b.words - a.words) };
+}
+
 export async function checkUrl(browser, url, requests) {
   const findings = [];
   const add = (level, title, value, where = []) => findings.push({ level, title, value, where });
@@ -102,6 +142,20 @@ export async function checkUrl(browser, url, requests) {
     await tab.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
     await new Promise(r => setTimeout(r, 1500));
     const rendered = await tab.evaluate(extract, host);
+    // Google renderiza con una pantalla tan alta como la página y sin hacer scroll
+    const height = await tab.evaluate(() => Math.min(document.documentElement.scrollHeight, 12000));
+    await tab.setViewport({ width: 412, height: Math.max(915, height), isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+    await new Promise(r => setTimeout(r, 3000));
+    const css = await tab.evaluate(hiddenContent);
+    // segunda pasada: interactuar como una persona (ratón y rueda). Muchos plugins (WP Rocket, LiteSpeed,
+    // Perfmatters…) retrasan el JavaScript hasta la primera interacción; Googlebot nunca interactúa
+    await tab.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+    await tab.mouse.move(120, 300);
+    await tab.mouse.move(200, 420, { steps: 5 });
+    for (let y = 0; y < height + 915; y += 500) { await tab.mouse.wheel({ deltaY: 500 }); await new Promise(r => setTimeout(r, 150)); }
+    await new Promise(r => setTimeout(r, 1500));
+    const revealed = new Set(await tab.evaluate(() => [...document.querySelectorAll('[data-ssr-hidden]')].filter(e => e.checkVisibility({ opacityProperty: true, visibilityProperty: true })).map(e => Number(e.dataset.ssrHidden))));
+    css.groups.forEach(g => { g.onScroll = revealed.has(g.id); });
     await tab.setJavaScriptEnabled(false);
     await tab.setRequestInterception(true);
     tab.on('request', r => r.isNavigationRequest() ? r.continue() : r.abort());
@@ -120,7 +174,18 @@ export async function checkUrl(browser, url, requests) {
     if (!initial.h1.length && rendered.h1.length) add('aviso', 'El H1 solo aparece con JavaScript', rendered.h1[0]);
     if (rendered.links >= 5 && initial.links < rendered.links * 0.5) add('aviso', 'Enlaces internos que solo aparecen con JavaScript', `${rendered.links - initial.links} de ${rendered.links} enlaces`);
     if (rendered.words >= 150 && initial.words < rendered.words * 0.5) add('aviso', 'Texto que solo aparece con JavaScript', `${Math.round(100 - 100 * initial.words / rendered.words)} % del texto (${initial.words} de ${rendered.words} palabras en el HTML inicial)`);
-    return { status: findings.some(f => f.level === 'problema') ? 'problema' : findings.length ? 'aviso' : 'ok', findings, initial, rendered };
+    // contenido oculto por CSS (fiabilidad media: el renderizador de Google no se puede reproducir exacto)
+    const share = n => css.total ? Math.round(100 * n / css.total) : 0;
+    const list = gs => gs.slice(0, 6).map(g => `${g.selector} (${g.reason}${g.animation ? ', animación' : ''}) — ${g.words} palabras: «${g.text}…»`);
+    const onScroll = css.groups.filter(g => g.reason !== 'display:none' && g.onScroll);
+    const invisible = css.groups.filter(g => g.reason !== 'display:none' && !g.onScroll);
+    const collapsed = css.groups.filter(g => g.reason === 'display:none');
+    const sum = gs => gs.reduce((t, g) => t + g.words, 0);
+    // umbrales: ignorar restos pequeños (p. ej. un 3 % del texto)
+    if (sum(onScroll) >= 20 && share(sum(onScroll)) >= 5) add(share(sum(onScroll)) >= 30 ? 'problema' : 'aviso', 'Contenido que solo aparece al interactuar', `${share(sum(onScroll))} % del texto principal (${sum(onScroll)} palabras) solo se ve tras hacer scroll o mover el ratón, y Googlebot no interactúa${onScroll.some(g => g.animation) ? ' (animaciones de entrada)' : ''}`, list(onScroll));
+    if (sum(invisible) >= 50 && share(sum(invisible)) >= 10) add('aviso', 'Contenido invisible por CSS aunque se interactúe', `${share(sum(invisible))} % del texto principal (${sum(invisible)} palabras): carrusel, rotativo, pestaña o efecto`, list(invisible));
+    if (sum(collapsed) >= 100 && share(sum(collapsed)) >= 40) add('aviso', 'Mucho contenido principal oculto (display:none)', `${share(sum(collapsed))} % del texto principal (${sum(collapsed)} palabras) en pestañas, acordeones o bloques ocultos`, list(collapsed));
+    return { status: findings.some(f => f.level === 'problema') ? 'problema' : findings.length ? 'aviso' : 'ok', findings, initial, rendered, css: { total: css.total, hidden: css.hidden } };
   } finally {
     await tab.close().catch(() => {});
   }

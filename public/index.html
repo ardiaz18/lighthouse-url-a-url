@@ -139,6 +139,13 @@ details.set-block[open]>summary::after{transform:rotate(-135deg)}
 .btn-text{background:none;border:0;padding:.2rem 0;font-family:var(--f-j);font-weight:700;font-size:.84rem;cursor:pointer;color:var(--ink)}
 .btn-text:hover{text-decoration:underline}
 .btn-text.btn-danger{color:#C5221F}
+/* guías paso a paso dentro de Ajustes */
+.guide{border:1px solid var(--rule);border-radius:12px;padding:.6rem .9rem;background:var(--bg)}
+.guide summary{font-family:var(--f-j);font-weight:700;font-size:.86rem;color:var(--coral-h);cursor:pointer}
+.guide[open] summary{margin-bottom:.5rem}
+.guide ol{margin:0;padding-left:1.2rem;display:grid;gap:.4rem;font-size:.86rem;color:var(--ink-2);line-height:1.55}
+.guide p{margin-top:.6rem;font-size:.84rem}
+.guide strong{color:var(--ink)}
 .danger-zone h3{color:#C5221F}
 .footer-inner{display:flex;align-items:center;justify-content:space-between;gap:1rem;flex-wrap:wrap}
 .footer-links{display:flex;gap:.4rem}
@@ -227,7 +234,17 @@ footer a{color:var(--ink)}
     </details>
     <section class="set-block">
       <div class="set-head"><h3>Datos de usuarios reales (CrUX)</h3><span class="badge" id="crux-badge"></span></div>
-      <p class="meta">Muestra las Core Web Vitals (LCP, INP y CLS) de visitantes reales de Chrome en los últimos 28 días, los mismos datos de PageSpeed Insights. Necesita una clave gratuita de Google Cloud: <a href="https://github.com/ardiaz18/technical-seo-report#datos-de-usuarios-reales-crux" target="_blank" rel="noopener">cómo conseguirla</a>. Se guarda solo en este equipo.</p>
+      <p class="meta">Muestra las Core Web Vitals (LCP, INP y CLS) de visitantes reales de Chrome en los últimos 28 días, los mismos datos de PageSpeed Insights. Necesita una clave gratuita de Google Cloud, que se guarda solo en este equipo.</p>
+      <details class="guide">
+        <summary>Cómo conseguir la clave</summary>
+        <ol>
+          <li>Entra en <a href="https://console.cloud.google.com" target="_blank" rel="noopener">console.cloud.google.com</a> y crea un proyecto (o usa uno que ya tengas). No hace falta tarjeta.</li>
+          <li>En <strong>APIs y servicios → Biblioteca</strong>, busca <strong>Chrome UX Report API</strong> y pulsa <strong>Habilitar</strong>.</li>
+          <li>En <strong>APIs y servicios → Credenciales</strong>, pulsa <strong>Crear credenciales → Clave de API</strong>.</li>
+          <li>Edita la clave y, en <strong>Restricciones de API</strong>, limítala a <strong>Chrome UX Report API</strong>.</li>
+          <li>Copia la clave, pégala aquí abajo y pulsa <strong>Guardar clave</strong>.</li>
+        </ol>
+      </details>
       <label>Clave de la API de CrUX<input type="password" id="crux-key" autocomplete="off" spellcheck="false" placeholder="AIza…"></label>
       <div class="actions">
         <button class="btn btn-small" id="crux-save">Guardar clave</button>
@@ -237,7 +254,18 @@ footer a{color:var(--ink)}
     </section>
     <section class="set-block">
       <div class="set-head"><h3>Google Search Console</h3><span class="badge" id="gsc-badge"></span></div>
-      <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad. <a href="https://github.com/ardiaz18/technical-seo-report#google-search-console" target="_blank" rel="noopener">Cómo configurarlo</a>.</p>
+      <p class="meta">Muestra lo que Google ha hecho de verdad con cada URL: si está indexada, si pudo descargarla en su último rastreo (detecta bloqueos de firewall o CDN), la canonical que ha elegido y la fecha del último rastreo. Solo funciona con webs a las que tengas acceso en Search Console; hasta 2.000 URLs al día por propiedad.</p>
+      <details class="guide">
+        <summary>Cómo conectarlo</summary>
+        <ol>
+          <li>Pulsa <strong>Conectar con Google Search Console</strong>: se abre una pestaña de Google.</li>
+          <li>Elige la cuenta de Google que tiene acceso a las propiedades de Search Console de tus webs.</li>
+          <li>Si aparece «Google no ha verificado esta aplicación», pulsa <strong>Configuración avanzada → Ir a Technical SEO Report</strong>.</li>
+          <li>Pulsa <strong>Permitir</strong> (solo lectura de Search Console) y vuelve aquí: aparecerá la columna <strong>Google</strong> en la tabla.</li>
+        </ol>
+        <p>Si Google muestra «Acceso bloqueado», la app está en modo prueba: quien administra la herramienta debe añadir tu correo como usuario de prueba en Google Cloud (Google Auth Platform → Público). Tu contraseña nunca se escribe en la herramienta, solo en la página de Google. Puedes retirar el permiso cuando quieras con <strong>Desconectar</strong> o desde tu cuenta de Google (Seguridad → Aplicaciones de terceros).</p>
+        <p><strong>Con cuenta de servicio</strong> (equipos o servidor, no caduca): en Google Cloud, habilita <strong>Google Search Console API</strong>; en <strong>IAM y administración → Cuentas de servicio</strong>, crea una cuenta y descarga su clave en <strong>JSON</strong>; añade su correo (…@….iam.gserviceaccount.com) como usuario <strong>Restringido</strong> en cada propiedad de Search Console (Configuración → Usuarios y permisos) y pega el contenido del .json en la opción de abajo.</p>
+      </details>
       <div class="connected" id="gsc-account" hidden>
         <span id="gsc-account-text"></span>
         <button class="btn-text btn-danger" id="gsc-disconnect">Desconectar</button>

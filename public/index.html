@@ -159,6 +159,10 @@ dialog.drawer[open]::backdrop{background:rgba(13,13,13,.32)}
 .set-block:last-child{border-bottom:0}
 .set-block h3{font-family:var(--f-j);font-size:.98rem;color:var(--ink);margin:0}
 .set-block p{margin:0;font-size:.9rem;color:var(--ink-3);line-height:1.6}
+.set-block ul{margin:0;padding-left:1.1rem;display:grid;gap:.35rem;font-size:.88rem;color:var(--ink-3);line-height:1.55}
+.set-block li strong,.set-block p strong{color:var(--ink)}
+.set-block code{font-size:.82em;background:var(--bg);padding:0 .25rem;border-radius:4px}
+details.set-block>p,details.set-block>ul{margin-top:.6rem}
 .set-block label{margin-top:.2rem}
 .set-block input,.set-block textarea{width:100%;font:inherit;font-size:.92rem;padding:.65rem .85rem;border:1.5px solid var(--rule);border-radius:12px;background:var(--white)}
 .set-block input:focus,.set-block textarea:focus{outline:none;border-color:var(--coral)}
@@ -272,6 +276,23 @@ footer a{color:var(--ink)}
       <p>Introduce la URL de un sitio y elige móvil o escritorio. La herramienta rastrea sus páginas (sitemap, robots.txt y enlaces internos) y analiza cada URL: el informe completo de Google Lighthouse con el motor Unlighthouse, sin alterar sus resultados, y las Core Web Vitals de usuarios reales de Chrome.</p>
       <p>Si lo activas, comprueba también cómo puede verla Google: recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript o al interactuar y contenido oculto por CSS. Con Search Console conectado, añade lo que Google ha hecho de verdad: si la URL está indexada, si pudo rastrearla y qué canonical eligió.</p>
       <p>Al terminar tendrás cada URL ordenada por prioridad, con qué hacer y dónde en cada problema, para revisarlo aquí o descargarlo con instrucciones listas para que Claude lo interprete.</p>
+    </details>
+    <details class="set-block" id="how-render">
+      <summary><h3>Cómo se mide el renderizado para Google</h3></summary>
+      <p>Se activa con «Comprobar renderizado para Google» y empieza cuando termina la auditoría, para no falsear las mediciones de rendimiento. Cada URL se abre con Google Chrome imitando cómo renderiza Google:</p>
+      <ul>
+        <li><strong>Sin memoria:</strong> cada URL en una sesión nueva, sin cookies, caché ni service workers, y con los permisos denegados.</li>
+        <li><strong>Pantalla de Googlebot smartphone:</strong> 412 px de ancho; después, una pantalla tan alta como la página, sin scroll ni clics.</li>
+        <li><strong>Espera a que la página termine:</strong> red inactiva y página sin cambios, y las animaciones CSS se adelantan, como hace Google.</li>
+      </ul>
+      <p>Con eso se comprueba:</p>
+      <ul>
+        <li><strong>Indexabilidad:</strong> errores HTTP, <code>noindex</code> en la meta robots o en la cabecera <code>X-Robots-Tag</code> y canonical que apunta a otra URL.</li>
+        <li><strong>robots.txt:</strong> si bloquea a Googlebot la URL o archivos de tu propio dominio necesarios para pintarla (JS, CSS, datos), con las mismas reglas que aplica Google. Los archivos de otros dominios se ignoran.</li>
+        <li><strong>HTML inicial frente a renderizado:</strong> si el título, el H1, la canonical, la meta robots, los enlaces internos o el texto solo aparecen o cambian al ejecutar JavaScript.</li>
+        <li><strong>Contenido oculto:</strong> qué texto del contenido principal queda invisible (<code>opacity</code>, <code>visibility</code>, <code>display:none</code>), sin contar menús, cabecera, pie ni avisos de cookies. Después se mueve el ratón y la rueda como una persona: lo que aparece entonces es <em>contenido que solo aparece al interactuar</em>, que Googlebot no ve; lo que sigue oculto suele ser un carrusel, una pestaña o un efecto.</li>
+      </ul>
+      <p><strong>Fiabilidad:</strong> alta en robots.txt, indexabilidad y HTML inicial frente a renderizado, porque son hechos comprobables; media en el contenido oculto, porque el renderizador de Google no se puede reproducir exacto. No detecta bloqueos de firewall a las IP de Google ni sabe qué ha indexado Google: eso lo da la columna «Google» con Search Console conectado. Ante un aviso importante, la comprobación definitiva es la Inspección de URLs de Search Console («Probar URL publicada» → «Ver página probada»).</p>
     </details>
     <section class="set-block">
       <div class="set-head"><h3>Datos de usuarios reales (CrUX)</h3><span class="badge" id="crux-badge"></span></div>

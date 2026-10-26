@@ -4,6 +4,7 @@ import { createCrux } from './crux.mjs';
 import { createRender } from './render.mjs';
 import { createGsc, fetchStates, indexingStates } from './gsc.mjs';
 import { googleClient } from './google-client.mjs';
+import { buildReportHtml, renderPdf } from './pdf.mjs';
 import { fork } from 'node:child_process';
 import { readFile, readdir, stat, writeFile, rm, rmdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
@@ -424,6 +425,28 @@ function issues(lh) {
 const scoreNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
 const catNames = { ...scoreNames, render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const levelNames = { alta: 'Alta', media: 'Media', baja: 'Baja' };
+// Informe en PDF para el cliente
+async function exportPdf(key) {
+  const dir = auditDir(key), reports = await resultReports(key);
+  if (!reports.length) throw Error('Esta auditoría no tiene informes terminados.');
+  const first = reports[0];
+  const averages = Object.fromEntries(Object.keys(scoreNames).map(id => { const v = reports.map(r => r.scores[id]).filter(x => x != null); return [id, v.length ? Math.round(v.reduce((t, x) => t + x, 0) / v.length) : null]; }));
+  const issues = new Map();
+  for (const r of reports) for (const i of r.issues) {
+    const e = issues.get(i.id) || { title: i.title, category: catNames[i.category], action: i.action, where: i.where?.[0], urls: 0, impact: 0 };
+    e.urls++; e.impact += i.impact || 0;
+    issues.set(i.id, e);
+  }
+  const ownField = reports.find(r => r.field?.scope === 'origin')?.field || null;
+  const history = await crux.history(dir, new URL(first.url).origin, first.formFactor).catch(() => null);
+  const html = await buildReportHtml({
+    host: key.split('/')[0], date: first.fetchTime || Date.now(), device: first.formFactor === 'desktop' ? 'escritorio' : 'móvil',
+    reports, averages, origin: ownField, history, benchmark: await crux.savedBenchmark(dir),
+    topIssues: [...issues.values()].sort((a, b) => b.urls - a.urls || b.impact - a.impact),
+    scoreNames, fieldNames, fieldFormat
+  }, root);
+  return renderPdf(html);
+}
 // Evolución de usuarios reales y competencia (si se han consultado) para el .md
 async function contextLines(key) {
   const dir = auditDir(key), lines = [];
@@ -594,6 +617,13 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     if (req.method === 'DELETE' && path === '/api/results') return send(200, { deleted: await deleteAllAudits() });
+    if (req.method === 'GET' && path.startsWith('/api/export/pdf/')) {
+      const key = path.slice('/api/export/pdf/'.length);
+      const pdf = await exportPdf(key);
+      const name = `informe-seo-${key.split('/')[0].replace(/[^\w.-]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
+      res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${name}"` });
+      return res.end(pdf);
+    }
     if (req.method === 'GET' && path === '/api/compare') return send(200, await compareAudits(query.get('before'), query.get('after')));
     if (req.method === 'GET' && path === '/api/export/compare.md') {
       const name = `antes-despues-${query.get('after').split('/')[0].replace(/[^\w.-]+/g, '-')}.md`;

@@ -220,6 +220,7 @@ footer a{color:var(--ink)}
     <h2>Informes Lighthouse</h2>
     <div class="row" style="margin-top:1rem"><select id="results" aria-label="Auditoría guardada"></select>
       <div class="actions" id="exports" hidden>
+        <button class="btn-outline" id="export-pdf" title="Informe para el cliente con tu marca: resumen, usuarios reales, estado en Google, competencia, qué corregir y páginas prioritarias">Informe PDF</button>
         <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado con las instrucciones para Claude">Analizar con Claude</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
         <button class="btn-outline" id="check-render" hidden title="Comprueba robots.txt y HTML inicial frente a renderizado en todas las URLs de esta auditoría">Comprobar renderizado para Google</button>
@@ -472,6 +473,20 @@ async function checkRender(key, force) {
   if (shownKey === key) { await loadResults(); }
 }
 $('#check-render').addEventListener('click', () => checkRender(shownKey));
+// el PDF tarda unos segundos: se pide con fetch para mostrar el progreso y luego se descarga
+$('#export-pdf').addEventListener('click', async () => {
+  const btn = $('#export-pdf');
+  btn.disabled = true; btn.textContent = 'Generando PDF…';
+  try {
+    const res = await fetch('/api/export/pdf/' + shownKey);
+    if (!res.ok) throw Error((await res.json()).error);
+    const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'informe-seo.pdf';
+    const link = el('a', { href: URL.createObjectURL(await res.blob()), download: name });
+    document.body.append(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+  } catch (err) { $('#analysis').hidden = false; $('#analysis').textContent = 'No se pudo generar el PDF: ' + err.message; }
+  finally { btn.disabled = false; btn.textContent = 'Informe PDF'; }
+});
 $('#recheck-render').addEventListener('click', () => { if (confirm('¿Volver a comprobar el renderizado de todas las URLs de esta auditoría? Tarda entre 10 y 30 segundos por URL.')) checkRender(shownKey, true); });
 $('#delete-audit').addEventListener('click', async () => {
   const label = $('#results').selectedOptions[0]?.textContent || shownKey;

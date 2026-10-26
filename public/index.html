@@ -127,6 +127,17 @@ dialog input:focus{outline:none;border-color:var(--coral)}
 .cmp-lists ul{margin:.3rem 0 0;padding-left:1.1rem;color:var(--ink-2)}
 .tag-trend{font-family:var(--f-j);font-size:.72rem;font-weight:700;border-radius:100px;padding:.12rem .55rem;background:#EDEDED;color:var(--ink);white-space:nowrap}
 .tag-trend.mejor{background:#E6F4EA;color:#137333}.tag-trend.peor{background:#FCE8E6;color:#C5221F}.tag-trend.mixta{background:#FEF7E0;color:#B06000}
+/* selección de URLs para Claude, PDF y CSV */
+.select-bar{display:flex;flex-wrap:wrap;gap:.4rem .5rem;align-items:center;margin:.4rem 0 .8rem;font-size:.86rem}
+.select-bar .lbl-sel{font-family:var(--f-j);font-weight:700;font-size:.8rem;color:var(--ink);margin-right:.2rem}
+.chip{font:inherit;font-family:var(--f-j);font-size:.76rem;font-weight:700;border:1.5px solid var(--rule);background:var(--white);color:var(--ink-2);border-radius:100px;padding:.2rem .7rem;cursor:pointer}
+.chip:hover{border-color:var(--ink)}
+.chip.on{background:var(--ink);border-color:var(--ink);color:var(--white)}
+.chip.part{border-color:var(--ink);color:var(--ink)}
+.sel-count{flex-basis:100%;color:var(--ink-3);font-size:.82rem}
+.sel-count b{color:var(--ink)}
+th.pick,td.pick{width:1.6rem;padding-right:0}
+td.pick input,th.pick input{width:16px;height:16px;accent-color:var(--coral);cursor:pointer}
 .vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:9rem}
 .vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
 [hidden]{display:none!important}
@@ -242,6 +253,7 @@ footer a{color:var(--ink)}
     <div id="trend"></div>
     <div class="panel" id="bench" hidden></div>
     <div class="panel" id="compare" hidden></div>
+    <div class="select-bar" id="select-bar" hidden></div>
     <div class="table" id="reports"><p class="empty">Todavía no hay informes guardados.</p></div>
     <div class="analysis" id="analysis" hidden></div>
     <div id="viewer"></div>
@@ -334,7 +346,7 @@ const cats = [['performance', 'Rendimiento'], ['accessibility', 'Accesibilidad']
 const catLabel = { ...Object.fromEntries(cats), render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const openIssues = new Set();
 const levels = { alta: ['Alta', 's-bad'], media: ['Media', 's-avg'], baja: ['Baja', 's-good'] };
-let timer, shownKey, settings = {}, resultsMeta = [];
+let timer, shownKey, settings = {}, resultsMeta = [], shownReports = [];
 const fieldLoading = new Set(), fieldError = {};
 
 function el(tag, attrs = {}, ...kids) {
@@ -412,14 +424,17 @@ async function showResult(key, quiet) {
   const showRender = !!meta?.render || renderLoading.has(key) || reports.some(r => r.render);
   $('#check-render').hidden = showRender;
   $('#recheck-render').hidden = !showRender || renderLoading.has(key);
+  shownReports = reports;
+  selectBar(reports);
   $('#reports').replaceChildren(...(reports.length ? [originNote(reports)].filter(Boolean) : []), reports.length ? el('table', {},
-    el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
+    el('thead', {}, el('tr', {}, el('th', { class: 'pick' }, pickAll(reports)), el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
         settings.crux?.enabled ? null : el('button', { class: 'btn-link', onclick: openSettings }, 'Activar')),
       settings.gsc?.connected ? el('th', { title: 'Datos reales de Google Search Console: indexación, último rastreo y si Googlebot pudo descargar la URL' }, 'Google') : null,
       showRender ? el('th', { title: 'Recursos bloqueados por robots.txt, contenido que solo aparece con JavaScript y contenido oculto por CSS o que solo aparece al interactuar. Imita el renderizado de Google; no es su vista real.' }, 'Renderizado Google') : null,
       el('th', {}, 'Problemas'), el('th', {}, 'Informe'))),
     el('tbody', {}, ...reports.flatMap(r => [el('tr', { class: r.report === current ? 'sel' : '' },
+      el('td', { class: 'pick' }, pickOne(r.url)),
       el('td', {}, el('span', { class: 'score ' + levels[r.level][1], title: 'Gravedad ' + r.severity }, levels[r.level][0])),
       el('td', { class: 'url' }, r.url), ...cats.map(c => el('td', {}, score(r.scores[c[0]]))),
       el('td', {}, fieldCell(r)),
@@ -428,7 +443,7 @@ async function showResult(key, quiet) {
       el('td', {}, r.issues.length ? el('button', { class: 'btn-link', 'aria-expanded': String(openIssues.has(r.url)), onclick: () => { openIssues.has(r.url) ? openIssues.delete(r.url) : openIssues.add(r.url); showResult(shownKey, true); } }, r.issues.length + (openIssues.has(r.url) ? ' ▴' : ' ▾')) : '0'),
       el('td', {}, el('button', { class: 'btn-link', onclick: () => view(r) }, 'Ver'), ' · ', el('a', { class: 'btn-link', href: r.report, target: '_blank', rel: 'noopener' }, 'Abrir ↗'), ' · ',
         el('button', { class: 'btn-link', title: 'Descarga el informe de esta URL con las instrucciones para Claude', onclick: () => analyzeWithClaude('/api/export/md/' + shownKey + '?url=' + encodeURIComponent(r.url)) }, 'Claude'))),
-      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: String(9 + (showRender ? 1 : 0) + (settings.gsc?.connected ? 1 : 0)) }, issueList(r.issues),
+      openIssues.has(r.url) ? el('tr', { class: 'issues-row' }, el('td', { colspan: String(10 + (showRender ? 1 : 0) + (settings.gsc?.connected ? 1 : 0)) }, issueList(r.issues),
         el('button', { class: 'btn-outline close-issues', onclick: closeIssues }, 'Cerrar ▴'))) : null
     ].filter(Boolean))))
     : el('p', { class: 'empty' }, 'Aún no hay informes terminados en esta auditoría.'));
@@ -478,14 +493,9 @@ $('#export-pdf').addEventListener('click', async () => {
   const btn = $('#export-pdf');
   btn.disabled = true; btn.textContent = 'Generando PDF…';
   try {
-    const res = await fetch('/api/export/pdf/' + shownKey);
-    if (!res.ok) throw Error((await res.json()).error);
-    const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || 'informe-seo.pdf';
-    const link = el('a', { href: URL.createObjectURL(await res.blob()), download: name });
-    document.body.append(link); link.click(); link.remove();
-    setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+    await download('/api/export/pdf/' + shownKey, 'informe-seo.pdf');
   } catch (err) { $('#analysis').hidden = false; $('#analysis').textContent = 'No se pudo generar el PDF: ' + err.message; }
-  finally { btn.disabled = false; btn.textContent = 'Informe PDF'; }
+  finally { btn.disabled = false; refreshSel(); }
 });
 $('#recheck-render').addEventListener('click', () => { if (confirm('¿Volver a comprobar el renderizado de todas las URLs de esta auditoría? Tarda entre 10 y 30 segundos por URL.')) checkRender(shownKey, true); });
 $('#delete-audit').addEventListener('click', async () => {
@@ -755,7 +765,79 @@ function view(r) {
   frame.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 $('#results').addEventListener('change', e => showResult(e.target.value));
-document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => { location.href = '/api/export/' + b.dataset.export + '/' + shownKey; }));
+document.querySelectorAll('[data-export]').forEach(b => b.addEventListener('click', () => download('/api/export/' + b.dataset.export + '/' + shownKey, 'auditoria.' + b.dataset.export).catch(err => { $('#analysis').hidden = false; $('#analysis').textContent = 'No se pudo descargar: ' + err.message; })));
+// ---------- Selección de URLs ----------
+// Se recuerda por auditoría en este navegador; si no hay ninguna marcada, se usan todas
+const picks = {};
+const selected = () => {
+  if (!picks[shownKey]) { let saved = []; try { saved = JSON.parse(localStorage.getItem('sel:' + shownKey) || '[]'); } catch {} picks[shownKey] = new Set(saved); }
+  return picks[shownKey];
+};
+const saveSel = () => { try { localStorage.setItem('sel:' + shownKey, JSON.stringify([...selected()])); } catch {} };
+// tipo de URL: primer tramo de la ruta (/blog/, /producto/…); la portada y las páginas sueltas aparte
+function urlGroup(url) {
+  const p = new URL(url).pathname.split('/').filter(Boolean);
+  return p.length === 0 ? 'Portada' : p.length === 1 ? 'Páginas' : '/' + p[0] + '/';
+}
+function pickOne(url) {
+  const box = el('input', { type: 'checkbox', 'aria-label': 'Incluir ' + url });
+  box.checked = selected().has(url);
+  box.dataset.url = url;
+  box.addEventListener('change', () => { box.checked ? selected().add(url) : selected().delete(url); saveSel(); refreshSel(); });
+  return box;
+}
+function pickAll(reports) {
+  const box = el('input', { type: 'checkbox', id: 'pick-all', 'aria-label': 'Seleccionar todas las URLs' });
+  box.addEventListener('change', () => { reports.forEach(r => box.checked ? selected().add(r.url) : selected().delete(r.url)); saveSel(); refreshSel(); });
+  return box;
+}
+function selectBar(reports) {
+  const bar = $('#select-bar');
+  bar.hidden = !reports.length;
+  if (!reports.length) return;
+  const groups = {};
+  for (const r of reports) (groups[urlGroup(r.url)] ||= []).push(r.url);
+  const order = Object.keys(groups).sort((a, b) => (a === 'Portada' ? -1 : b === 'Portada' ? 1 : a === 'Páginas' ? -1 : b === 'Páginas' ? 1 : groups[b].length - groups[a].length));
+  bar.replaceChildren(el('span', { class: 'lbl-sel' }, 'Seleccionar:'),
+    ...order.map(g => {
+      const chip = el('button', { class: 'chip', type: 'button', 'data-group': g, title: 'Marcar o desmarcar todas las URLs de este tipo' }, `${g} (${groups[g].length})`);
+      chip.addEventListener('click', () => { const all = groups[g].every(u => selected().has(u)); groups[g].forEach(u => all ? selected().delete(u) : selected().add(u)); saveSel(); refreshSel(); });
+      return chip;
+    }),
+    el('button', { class: 'chip', type: 'button', onclick: () => { selected().clear(); saveSel(); refreshSel(); } }, 'Ninguna'),
+    el('span', { class: 'sel-count', id: 'sel-count' }));
+  bar.groups = groups;
+  setTimeout(refreshSel);
+}
+// actualiza casillas, botones de tipo, contador y textos de los botones sin volver a pintar la tabla
+function refreshSel() {
+  const sel = selected(), total = shownReports.length;
+  const n = shownReports.filter(r => sel.has(r.url)).length;
+  document.querySelectorAll('#reports td.pick input').forEach(b => { b.checked = sel.has(b.dataset.url); });
+  const all = $('#pick-all');
+  if (all) { all.checked = n > 0 && n === total; all.indeterminate = n > 0 && n < total; }
+  for (const chip of document.querySelectorAll('#select-bar [data-group]')) {
+    const urls = $('#select-bar').groups?.[chip.dataset.group] || [], k = urls.filter(u => sel.has(u)).length;
+    chip.className = 'chip' + (k && k === urls.length ? ' on' : k ? ' part' : '');
+  }
+  $('#sel-count').innerHTML = n ? `<b>${n} de ${total} URLs seleccionadas.</b> «Analizar con Claude», «Informe PDF» y «Descargar CSV» incluirán solo estas.` : 'Sin selección: «Analizar con Claude», «Informe PDF» y «Descargar CSV» incluyen todas las URLs. Marca las casillas o un tipo de URL para elegir solo las más relevantes.';
+  const suffix = n ? ` (${n})` : '';
+  $('#analyze').textContent = 'Analizar con Claude' + suffix;
+  $('#export-pdf').textContent = 'Informe PDF' + suffix;
+  $('[data-export="csv"]').textContent = 'Descargar CSV' + suffix;
+}
+const selectedUrls = () => shownReports.filter(r => selected().has(r.url)).map(r => r.url);
+// descarga un archivo pedido con fetch (GET sin selección, POST con las URLs elegidas)
+async function download(path, fallbackName) {
+  const urls = selectedUrls();
+  const res = await fetch(path, urls.length ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ urls }) } : {});
+  if (!res.ok) throw Error((await res.json()).error);
+  const name = (res.headers.get('Content-Disposition') || '').match(/filename="([^"]+)"/)?.[1] || fallbackName;
+  const link = el('a', { href: URL.createObjectURL(await res.blob()), download: name });
+  document.body.append(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(link.href), 5000);
+}
+
 // Descarga el .md, que ya incluye las instrucciones para Claude
 function analyzeWithClaude(mdUrl) {
   location.href = mdUrl;
@@ -764,7 +846,12 @@ function analyzeWithClaude(mdUrl) {
   box.innerHTML = '<strong>Se ha descargado el informe (.md) con las instrucciones para Claude.</strong> Arrástralo a una conversación en Claude y envíalo: no hace falta escribir nada más.';
   box.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
 }
-$('#analyze').addEventListener('click', () => analyzeWithClaude('/api/export/md/' + shownKey));
+$('#analyze').addEventListener('click', async () => {
+  try { await download('/api/export/md/' + shownKey, 'auditoria.md'); } catch (err) { $('#analysis').hidden = false; $('#analysis').textContent = 'No se pudo descargar: ' + err.message; return; }
+  const n = selectedUrls().length, box = $('#analysis');
+  box.hidden = false;
+  box.innerHTML = `<strong>Se ha descargado el informe (.md) con las instrucciones para Claude${n ? ` (${n} URLs seleccionadas)` : ''}.</strong> Arrástralo a una conversación en Claude y envíalo: no hace falta escribir nada más.`;
+});
 // Cierra la lista de problemas y deja a la vista la fila de su URL
 function closeIssues() {
   if (!openIssues.size) return;

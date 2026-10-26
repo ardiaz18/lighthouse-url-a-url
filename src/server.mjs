@@ -426,8 +426,17 @@ const scoreNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad',
 const catNames = { ...scoreNames, render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const levelNames = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 // Informe en PDF para el cliente
-async function exportPdf(key) {
-  const dir = auditDir(key), reports = await resultReports(key);
+// Exportaciones con selección: solo las URLs elegidas (si no se elige ninguna, todas)
+async function selectedReports(key, urls) {
+  const all = await resultReports(key);
+  if (!urls?.length) return { reports: all, total: all.length, selected: false };
+  const pick = new Set(urls);
+  const reports = all.filter(r => pick.has(r.url));
+  if (!reports.length) throw Error('Ninguna de las URLs seleccionadas está en esta auditoría.');
+  return { reports, total: all.length, selected: true };
+}
+async function exportPdf(key, urls) {
+  const dir = auditDir(key), { reports, total, selected } = await selectedReports(key, urls);
   if (!reports.length) throw Error('Esta auditoría no tiene informes terminados.');
   const first = reports[0];
   const averages = Object.fromEntries(Object.keys(scoreNames).map(id => { const v = reports.map(r => r.scores[id]).filter(x => x != null); return [id, v.length ? Math.round(v.reduce((t, x) => t + x, 0) / v.length) : null]; }));
@@ -441,7 +450,7 @@ async function exportPdf(key) {
   const history = await crux.history(dir, new URL(first.url).origin, first.formFactor).catch(() => null);
   const html = await buildReportHtml({
     host: key.split('/')[0], date: first.fetchTime || Date.now(), device: first.formFactor === 'desktop' ? 'escritorio' : 'móvil',
-    reports, averages, origin: ownField, history, benchmark: await crux.savedBenchmark(dir),
+    reports, total, selected, averages, origin: ownField, history, benchmark: await crux.savedBenchmark(dir),
     topIssues: [...issues.values()].sort((a, b) => b.urls - a.urls || b.impact - a.impact),
     scoreNames, fieldNames, fieldFormat
   }, root);
@@ -467,8 +476,8 @@ async function contextLines(key) {
   }
   return lines;
 }
-async function exportMarkdown(key) {
-  const reports = await resultReports(key);
+async function exportMarkdown(key, urls) {
+  const { reports, total, selected } = await selectedReports(key, urls);
   const first = reports[0] || {};
   const repeated = new Map();
   for (const r of reports) for (const i of r.issues) {
@@ -481,7 +490,7 @@ async function exportMarkdown(key) {
     `# Auditoría Lighthouse — ${key.split('/')[0]}`, '',
     `- Fecha: ${first.fetchTime ? new Date(first.fetchTime).toLocaleString('es-ES') : '—'}`,
     `- Dispositivo: ${first.formFactor === 'desktop' ? 'escritorio' : 'móvil'}`,
-    `- URLs analizadas: ${reports.length}`,
+    selected ? `- URLs incluidas: ${reports.length} de ${total} (selección manual de las más relevantes)` : `- URLs analizadas: ${reports.length}`,
     ...(originField ? fieldLine(originField).map(l => l.replace(', datos de todo el dominio: esta URL no tiene tráfico suficiente', ', todo el dominio')) : []), '',
     ...claudeBrief([
       'Haz un diagnóstico general del sitio en 3-5 frases.',
@@ -554,11 +563,11 @@ async function exportUrlMarkdown(key, url) {
     ...issueLines(r.issues, 5)
   ].join('\n');
 }
-async function exportCsv(key) {
+async function exportCsv(key, urls) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
   const vitals = ['lcp', 'inp', 'cls'];
   const rows = [['URL', 'Prioridad', 'Gravedad', ...Object.values(scoreNames), ...vitals.map(id => `${fieldNames[id]} real (p75)`), 'Datos reales de', 'Renderizado para Google', 'Google (Search Console)', 'Cobertura en Google', 'Último rastreo de Google', 'Problemas', 'Principales problemas']];
-  for (const r of await resultReports(key)) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(scoreNames).map(id => r.scores[id]),
+  for (const r of (await selectedReports(key, urls)).reports) rows.push([r.url, levelNames[r.level], r.severity, ...Object.keys(scoreNames).map(id => r.scores[id]),
     ...vitals.map(id => r.field?.metrics[id] ? `${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})` : ''),
     r.field ? ({ url: 'URL', 'url-all': 'URL (móvil + escritorio)', origin: 'Dominio' }[r.field.scope]) : r.field === null ? 'Sin datos' : '',
     r.render ? renderNames[r.render.status] : '',
@@ -567,9 +576,9 @@ async function exportCsv(key) {
   return '﻿' + rows.map(r => r.map(q).join(';')).join('\r\n');
 }
 
-async function readJson(req) {
+async function readJson(req, limit = maxBytes) {
   let body = '';
-  for await (const chunk of req) { body += chunk; if (body.length > maxBytes) throw Error('Solicitud demasiado grande'); }
+  for await (const chunk of req) { body += chunk; if (body.length > limit) throw Error('Solicitud demasiado grande'); }
   return JSON.parse(body || '{}');
 }
 async function sendFile(res, base, path) {
@@ -608,18 +617,19 @@ const server = http.createServer(async (req, res) => {
     if (req.method === 'POST' && path === '/api/audits') return send(201, publicAudit(startAudit(await readJson(req))));
     if (req.method === 'GET' && path === '/api/results') return send(200, await listResults());
     const exp = path.match(/^\/api\/export\/(md|csv)\/(.+)$/);
-    if (req.method === 'GET' && exp) {
+    if ((req.method === 'GET' || req.method === 'POST') && exp) {
       const pageUrl = new URL(req.url, 'http://x').searchParams.get('url');
-      const body = exp[1] === 'csv' ? await exportCsv(exp[2]) : pageUrl ? await exportUrlMarkdown(exp[2], pageUrl) : await exportMarkdown(exp[2]);
+      const urls = req.method === 'POST' ? (await readJson(req, 200_000)).urls : null;
+      const body = exp[1] === 'csv' ? await exportCsv(exp[2], urls) : pageUrl ? await exportUrlMarkdown(exp[2], pageUrl) : await exportMarkdown(exp[2], urls);
       const name = `lighthouse-${(pageUrl ? shortUrl(pageUrl) : exp[2]).replace(/[^\w.-]+/g, '-').replace(/-+$/, '')}.${exp[1]}`;
       res.writeHead(200, { 'Content-Type': (exp[1] === 'md' ? 'text/markdown' : 'text/csv') + '; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` });
       return res.end(body);
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     if (req.method === 'DELETE' && path === '/api/results') return send(200, { deleted: await deleteAllAudits() });
-    if (req.method === 'GET' && path.startsWith('/api/export/pdf/')) {
+    if ((req.method === 'GET' || req.method === 'POST') && path.startsWith('/api/export/pdf/')) {
       const key = path.slice('/api/export/pdf/'.length);
-      const pdf = await exportPdf(key);
+      const pdf = await exportPdf(key, req.method === 'POST' ? (await readJson(req, 200_000)).urls : null);
       const name = `informe-seo-${key.split('/')[0].replace(/[^\w.-]+/g, '-')}-${new Date().toISOString().slice(0, 10)}.pdf`;
       res.writeHead(200, { 'Content-Type': 'application/pdf', 'Content-Disposition': `attachment; filename="${name}"` });
       return res.end(pdf);

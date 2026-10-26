@@ -147,7 +147,7 @@ tr.sub{break-before:avoid}
     <div class="eyebrow">Informe de SEO técnico</div>
     <h1>Rendimiento, renderizado e indexación</h1>
     <div class="site">${esc(d.host)}</div>
-    <div class="meta">${d.reports.length} URLs analizadas · ${d.device} · ${date(d.date)}</div>
+    <div class="meta">${d.selected ? `${d.reports.length} URLs seleccionadas de ${d.total} analizadas` : `${d.reports.length} URLs analizadas`} · ${d.device} · ${date(d.date)}</div>
   </div>
   <div class="by">Elaborado por <b>Alicia Ruiz</b>, consultora de SEO técnico · aliciaruiz.es</div>
 </div>
@@ -157,7 +157,7 @@ ${section('Resumen', `<div class="tiles">${scoreTiles}</div>
     <div class="tile"><span class="lbl">Prioridad alta</span><span class="big poor">${levelCount('alta')}</span><span class="small">URLs que conviene corregir primero</span></div>
     <div class="tile"><span class="lbl">Prioridad media</span><span class="big needs">${levelCount('media')}</span><span class="small">URLs con mejoras pendientes</span></div>
     <div class="tile"><span class="lbl">Sin problemas importantes</span><span class="big good">${levelCount('baja')}</span><span class="small">URLs en buen estado</span></div>
-  </div>`, 'Puntuación media de las páginas analizadas con Google Lighthouse (de 0 a 100). A partir de 90 es buena; por debajo de 50 requiere atención prioritaria.')}
+  </div>`, (d.selected ? `Selección de las ${d.reports.length} páginas más relevantes. ` : '') + 'Puntuación media de las páginas analizadas con Google Lighthouse (de 0 a 100). A partir de 90 es buena; por debajo de 50 requiere atención prioritaria.')}
 
 ${real}
 ${gscBlock}
@@ -174,7 +174,7 @@ ${section('Páginas prioritarias', `<table>${head}<tbody>${priority}</tbody></ta
   <p><a href="https://aliciaruiz.es/contacto/">aliciaruiz.es/contacto</a></p>
 </section>
 
-${d.reports.length > 15 ? `<section class="annex"><h2>Anexo: todas las URLs analizadas</h2><table>${head}<tbody>${d.reports.map(urlRow).join('')}</tbody></table></section>` : ''}
+${d.reports.length > 15 ? `<section class="annex"><h2>Anexo: ${d.selected ? 'todas las URLs seleccionadas' : 'todas las URLs analizadas'}</h2><table>${head}<tbody>${d.reports.map(urlRow).join('')}</tbody></table></section>` : ''}
 
 <p class="notes">Puntuaciones de laboratorio de Google Lighthouse, que pueden variar unos puntos entre mediciones. Datos de usuarios reales del Chrome UX Report de Google${gsc.length ? ' y estado de indexación de Google Search Console' : ''}. Generado con Technical SEO Report.</p>
 </body></html>`;

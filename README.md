@@ -11,6 +11,7 @@ Herramienta local de auditoría de SEO técnico, URL a URL: **rendimiento** (Goo
 - **Evolución de usuarios reales** del dominio en los últimos 6 meses (LCP, INP y CLS, semana a semana).
 - **Competencia:** Core Web Vitals reales de tu dominio frente a los de hasta 6 competidores.
 - **Informe PDF para el cliente** con tu marca: resumen, usuarios reales y su evolución, estado en Google, renderizado, competencia, qué corregir, páginas prioritarias y llamada a contratar.
+- **Selección de URLs:** marca URLs sueltas o tipos completos (portada, páginas, /blog/…) para que «Analizar con Claude», el informe PDF y el CSV incluyan solo las más relevantes.
 - **Antes y después:** compara dos auditorías del mismo sitio (medias, URLs que mejoran o empeoran, problemas resueltos y nuevos) y genera un resumen para el cliente con Claude.
 - Opcional: **Google Search Console** (datos reales de Google): si cada URL está indexada, si Googlebot pudo descargarla (bloqueos de firewall o CDN), la canonical que eligió y su último rastreo.
 - Opcional: **Renderizado para Google**, que avisa de recursos bloqueados por robots.txt y de contenido que solo aparece con JavaScript.

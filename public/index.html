@@ -100,6 +100,33 @@ dialog input{width:100%;font:inherit;padding:.7rem .9rem;border:1.5px solid var(
 dialog input:focus{outline:none;border-color:var(--coral)}
 .origin-note{position:sticky;left:0;border:1px solid var(--rule);border-radius:12px;padding:.8rem 1rem;margin-bottom:.8rem;background:var(--bg);font-size:.9rem;display:flex;flex-wrap:wrap;gap:.4rem .6rem;align-items:center}
 .origin-note .meta{flex-basis:100%;margin:0}
+/* evolución, competencia y antes/después */
+.panel,#trend>div{border:1px solid var(--rule);border-radius:14px;padding:1rem 1.2rem;margin:1rem 0;background:var(--white)}
+.panel h3,#trend h3{font-family:var(--f-j);font-size:.98rem;color:var(--ink);margin:0 0 .2rem}
+.panel-head{display:flex;justify-content:space-between;align-items:baseline;gap:1rem;flex-wrap:wrap;margin-bottom:.6rem}
+.trend-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(13rem,1fr));gap:1rem;margin-top:.7rem}
+.trend-cell{display:grid;gap:.2rem}
+.trend-cell .lbl{font-family:var(--f-j);font-size:.72rem;font-weight:700;letter-spacing:.05em;color:var(--ink-3);text-transform:uppercase}
+.trend-cell .now{font-family:var(--f-j);font-weight:800;font-size:1.25rem;color:var(--ink)}
+.trend-cell .now small{font-family:var(--f-q);font-weight:400;font-size:.8rem;color:var(--ink-3);margin-left:.35rem}
+.trend-cell svg{width:100%;height:44px;overflow:visible}
+.spark-line{fill:none;stroke:var(--ink-3);stroke-width:2;stroke-linejoin:round;stroke-linecap:round}
+.spark-limit{stroke:var(--rule);stroke-width:1;stroke-dasharray:3 3}
+.spark-hit{fill:transparent}
+.spark-hit:hover+.spark-dot,.spark-hit:hover{fill:rgba(13,13,13,.06)}
+.dot-good{fill:#1E8E3E}.dot-needs{fill:#E37400}.dot-poor{fill:#D93025}
+.inline-form{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+.inline-form input,.inline-form select{flex:1 1 16rem;font:inherit;font-size:.92rem;padding:.6rem .85rem;border:1.5px solid var(--rule);border-radius:12px;background:var(--white);color:var(--ink)}
+.cmp-avg{display:grid;grid-template-columns:repeat(auto-fit,minmax(9rem,1fr));gap:.8rem;margin:.8rem 0}
+.cmp-avg div{border:1px solid var(--rule);border-radius:12px;padding:.6rem .8rem}
+.cmp-avg b{display:block;font-family:var(--f-j);font-size:.72rem;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-3)}
+.cmp-avg span{font-family:var(--f-j);font-weight:800;font-size:1.1rem;color:var(--ink)}
+.delta{font-family:var(--f-j);font-weight:700;font-size:.8rem;margin-left:.3rem}
+.delta.up{color:#137333}.delta.down{color:#C5221F}.delta.flat{color:var(--ink-3)}
+.cmp-lists{display:grid;grid-template-columns:repeat(auto-fit,minmax(16rem,1fr));gap:1rem;margin:.6rem 0 1rem;font-size:.88rem}
+.cmp-lists ul{margin:.3rem 0 0;padding-left:1.1rem;color:var(--ink-2)}
+.tag-trend{font-family:var(--f-j);font-size:.72rem;font-weight:700;border-radius:100px;padding:.12rem .55rem;background:#EDEDED;color:var(--ink);white-space:nowrap}
+.tag-trend.mejor{background:#E6F4EA;color:#137333}.tag-trend.peor{background:#FCE8E6;color:#C5221F}.tag-trend.mixta{background:#FEF7E0;color:#B06000}
 .vitals{display:flex;flex-wrap:wrap;gap:.25rem;align-items:center;min-width:9rem}
 .vitals .score{min-width:0;font-size:.72rem;white-space:nowrap}
 [hidden]{display:none!important}
@@ -196,6 +223,8 @@ footer a{color:var(--ink)}
         <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado con las instrucciones para Claude">Analizar con Claude</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
         <button class="btn-outline" id="check-render" hidden title="Comprueba robots.txt y HTML inicial frente a renderizado en todas las URLs de esta auditoría">Comprobar renderizado para Google</button>
+        <button class="btn-outline" id="open-compare" title="Compara esta auditoría con otra anterior del mismo sitio: qué ha mejorado y qué ha empeorado">Antes y después</button>
+        <button class="btn-outline" id="open-bench" title="Compara los usuarios reales de este dominio con los de la competencia">Competencia</button>
         <button class="btn-outline btn-danger" id="delete-audit" title="Elimina esta auditoría y todos sus informes de este equipo">Borrar auditoría</button>
       </div>
     </div>
@@ -208,6 +237,9 @@ footer a{color:var(--ink)}
       <strong>Se ha alcanzado el límite de 200 URLs.</strong> En sitios grandes la herramienta no audita todas las páginas: se detiene en 200 y analiza como máximo 8 URLs de cada tipo (por ejemplo, 8 fichas de producto, 8 categorías…). Las páginas que comparten plantilla suelen tener los mismos problemas de Lighthouse, así que esta muestra cubre casi todo lo que hay que corregir. Auditar miles de URLs llevaría horas y repetiría los mismos resultados.
       <br><br>Si quieres revisar páginas concretas que no aparecen, lanza otra auditoría con <strong>Opciones avanzadas → Solo estas rutas</strong>. Ten en cuenta que algunas webs grandes bloquean o ralentizan las visitas automáticas, y eso puede empeorar las puntuaciones o hacer que fallen URLs.
     </div>
+    <div id="trend"></div>
+    <div class="panel" id="bench" hidden></div>
+    <div class="panel" id="compare" hidden></div>
     <div class="table" id="reports"><p class="empty">Todavía no hay informes guardados.</p></div>
     <div class="analysis" id="analysis" hidden></div>
     <div id="viewer"></div>
@@ -357,7 +389,7 @@ async function loadResults() {
   if (results.length) showResult(results.some(r => r.key === shownKey) ? shownKey : results[0].key, true);
 }
 async function showResult(key, quiet) {
-  if (key !== shownKey) { $('#viewer').replaceChildren(); $('#analysis').hidden = true; }
+  if (key !== shownKey) { $('#viewer').replaceChildren(); $('#analysis').hidden = true; $('#bench').hidden = $('#compare').hidden = true; setTimeout(() => loadTrend(key)); }
   shownKey = key;
   const sel = $('#results');
   if (![...sel.options].some(o => o.value === key)) sel.append(el('option', { value: key }, key.split('/')[0] + ' · en curso'));
@@ -468,6 +500,129 @@ function vitalChips(field) {
     return el('span', { class: 'score ' + ratingClass[m.rating], title: `${id.toUpperCase()} real: ${ratingText[m.rating]}` }, `${id.toUpperCase()} ${fieldFmt[id](m.p75)}`);
   }));
 }
+// ---------- Evolución de usuarios reales (CrUX History API) ----------
+const trendInfo = { lcp: ['LCP', v => (v / 1000).toFixed(1).replace('.', ',') + ' s', 2500, 4000], inp: ['INP', v => Math.round(v) + ' ms', 200, 500], cls: ['CLS', v => v.toFixed(2).replace('.', ','), 0.1, 0.25] };
+const rating = (id, v) => v <= trendInfo[id][2] ? 'good' : v <= trendInfo[id][3] ? 'needs' : 'poor';
+const svgEl = (tag, attrs) => { const e = document.createElementNS('http://www.w3.org/2000/svg', tag); for (const k in attrs) e.setAttribute(k, attrs[k]); return e; };
+function sparkline(id, values, periods) {
+  const pts = values.map((v, i) => [i, v]).filter(p => p[1] != null);
+  const W = 200, H = 40, pad = 5;
+  const svg = svgEl('svg', { viewBox: `0 0 ${W} ${H}`, preserveAspectRatio: 'none', role: 'img', 'aria-label': trendInfo[id][0] + ': evolución en las últimas ' + values.length + ' semanas' });
+  if (pts.length < 2) return svg;
+  const lo = Math.min(...pts.map(p => p[1]), id === 'cls' ? 0 : Infinity), hi = Math.max(...pts.map(p => p[1]), trendInfo[id][2]);
+  const x = i => pad + i * (W - 2 * pad) / (values.length - 1), y = v => H - pad - (hi === lo ? 0.5 : (v - lo) / (hi - lo)) * (H - 2 * pad);
+  // línea de referencia: el umbral «bueno» de Google
+  svg.append(svgEl('line', { class: 'spark-limit', x1: pad, x2: W - pad, y1: y(trendInfo[id][2]), y2: y(trendInfo[id][2]) }));
+  svg.append(svgEl('polyline', { class: 'spark-line', points: pts.map(([i, v]) => x(i) + ',' + y(v)).join(' '), 'vector-effect': 'non-scaling-stroke' }));
+  const [li, lv] = pts.at(-1);
+  svg.append(svgEl('circle', { class: 'dot-' + rating(id, lv), cx: x(li), cy: y(lv), r: 4, 'vector-effect': 'non-scaling-stroke' }));
+  // zonas de lectura: al pasar el ratón muestran la semana y el valor
+  pts.forEach(([i, v]) => { const r = svgEl('rect', { class: 'spark-hit', x: x(i) - (W / values.length) / 2, y: 0, width: W / values.length, height: H }); const t = svgEl('title', {}); t.textContent = `28 días hasta el ${new Date(periods[i]).toLocaleDateString('es-ES')}: ${trendInfo[id][1](v)}`; r.append(t); svg.append(r); });
+  return svg;
+}
+async function loadTrend(key) {
+  $('#trend').replaceChildren();
+  if (!settings.crux?.enabled) return;
+  const h = await json('/api/crux-history/' + key).catch(() => null);
+  if (shownKey !== key || !h?.periods?.length) return;
+  const words = { good: 'bueno', needs: 'mejorable', poor: 'malo' };
+  const cells = Object.keys(trendInfo).map(id => {
+    const vals = h.series[id] || [], known = vals.filter(v => v != null);
+    if (!known.length) return null;
+    const now = known.at(-1), then = known[0];
+    return el('div', { class: 'trend-cell' }, el('span', { class: 'lbl' }, trendInfo[id][0]),
+      el('span', { class: 'now' }, trendInfo[id][1](now), el('small', {}, words[rating(id, now)])),
+      sparkline(id, vals, h.periods),
+      el('span', { class: 'meta' }, `Hace ${Math.round(vals.length / 4.3)} meses: ${trendInfo[id][1](then)} (${words[rating(id, then)]})`));
+  }).filter(Boolean);
+  if (!cells.length) return;
+  $('#trend').replaceChildren(el('div', {}, el('h3', {}, 'Evolución de usuarios reales del dominio'),
+    el('p', { class: 'meta' }, `${new URL(h.origin).host} · ${h.formFactor === 'DESKTOP' ? 'escritorio' : 'móvil'} · percentil 75 de cada periodo de 28 días, semana a semana. La línea discontinua marca el umbral «bueno» de Google.`),
+    el('div', { class: 'trend-grid' }, ...cells)));
+}
+
+// ---------- Competencia (CrUX por dominio) ----------
+function benchTable(b) {
+  const cols = [['lcp', 'LCP'], ['inp', 'INP'], ['cls', 'CLS'], ['fcp', 'FCP'], ['ttfb', 'TTFB']];
+  const fmt = { lcp: v => (v / 1000).toFixed(1).replace('.', ',') + ' s', inp: v => Math.round(v) + ' ms', cls: v => v.toFixed(2).replace('.', ','), fcp: v => (v / 1000).toFixed(1).replace('.', ',') + ' s', ttfb: v => (v / 1000).toFixed(1).replace('.', ',') + ' s' };
+  return el('table', {}, el('thead', {}, el('tr', {}, el('th', {}, 'Dominio'), ...cols.map(c => el('th', {}, c[1])))),
+    el('tbody', {}, ...b.results.map(r => el('tr', { class: r.own ? 'sel' : '' }, el('td', {}, r.domain + (r.own ? ' (tu web)' : '')),
+      ...cols.map(([id]) => { const m = r.field?.metrics[id]; return el('td', {}, m ? el('span', { class: 'score ' + ratingClass[m.rating], title: ratingText[m.rating] }, fmt[id](m.p75)) : el('span', { class: 'meta' }, r.field ? '—' : 'Sin datos')); })))));
+}
+async function showBench(key, saved) {
+  const box = $('#bench');
+  const input = el('input', { placeholder: 'competidor1.es, competidor2.com…', 'aria-label': 'Dominios de la competencia' });
+  if (saved?.domains) input.value = saved.domains.join(', ');
+  const status = el('p', { class: 'msg', role: 'status' });
+  const run = el('button', { class: 'btn btn-small', onclick: async () => {
+    run.disabled = true; status.textContent = 'Consultando los datos de Google…';
+    try { const b = await json('/api/benchmark/' + key, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ domains: input.value }) }); showBench(key, b); }
+    catch (err) { status.textContent = 'Error: ' + err.message; run.disabled = false; }
+  } }, 'Comparar');
+  box.replaceChildren(el('div', { class: 'panel-head' }, el('h3', {}, 'Usuarios reales frente a la competencia'), el('button', { class: 'btn-text', onclick: () => { box.hidden = true; } }, 'Cerrar')),
+    el('p', { class: 'meta' }, 'Core Web Vitals de visitantes reales de Chrome (percentil 75, últimos 28 días) de cada dominio completo, según Google. Escribe hasta 6 dominios separados por comas.'),
+    el('div', { class: 'inline-form' }, input, run), status,
+    saved?.results ? el('div', { class: 'table' }, benchTable(saved)) : null,
+    saved?.fetchedAt ? el('p', { class: 'meta' }, 'Datos consultados el ' + new Date(saved.fetchedAt).toLocaleDateString('es-ES') + '.') : null);
+  box.hidden = false;
+}
+$('#open-bench').addEventListener('click', async () => {
+  if (!$('#bench').hidden) { $('#bench').hidden = true; return; }
+  if (!settings.crux?.enabled) { openSettings(); return; }
+  showBench(shownKey, await json('/api/benchmark/' + shownKey).catch(() => null));
+});
+
+// ---------- Antes y después ----------
+function deltaTag(v, id) {
+  if (v == null) return el('span', { class: 'delta flat' }, '–');
+  const t = id === 'performance' ? 10 : 5;
+  return el('span', { class: 'delta ' + (v >= t ? 'up' : v <= -t ? 'down' : 'flat') }, (v > 0 ? '+' : '') + v);
+}
+function showCompare(c) {
+  const box = $('#compare'), d = s => s ? new Date(s).toLocaleDateString('es-ES', { dateStyle: 'medium' }) : '—';
+  const names = Object.fromEntries(cats);
+  const list = (title, items) => el('div', {}, el('strong', {}, title), items.length ? el('ul', {}, ...items.slice(0, 6).map(i => el('li', {}, `${i.title} — ${i.urls} URL${i.urls > 1 ? 's' : ''}`))) : el('p', { class: 'meta' }, 'Ninguno'));
+  const counts = c.counts, labels = { mejor: 'Mejoran', peor: 'Empeoran', mixta: 'Mixtas', igual: 'Sin cambios', nueva: 'Nuevas', eliminada: 'Ya no aparecen' };
+  box.replaceChildren(
+    el('div', { class: 'panel-head' }, el('h3', {}, `Antes y después · ${d(c.before.date)} → ${d(c.after.date)}`),
+      el('div', { class: 'actions' },
+        el('button', { class: 'btn-outline btn-small', onclick: () => analyzeWithClaude(`/api/export/compare.md?before=${encodeURIComponent(c.before.key)}&after=${encodeURIComponent(c.after.key)}`) }, 'Analizar con Claude'),
+        el('button', { class: 'btn-text', onclick: () => { box.hidden = true; } }, 'Cerrar'))),
+    el('div', { class: 'cmp-avg' }, ...cats.map(([id, n]) => { const a = c.averages[id]; return el('div', {}, el('b', {}, n + ' (media)'), el('span', {}, `${a.before ?? '–'} → ${a.after ?? '–'}`), deltaTag(a.before != null && a.after != null ? a.after - a.before : null, id)); })),
+    el('p', { class: 'meta' }, Object.entries(labels).filter(([k]) => counts[k]).map(([k, l]) => `${l}: ${counts[k]}`).join(' · ')),
+    el('div', { class: 'cmp-lists' }, list('Problemas resueltos', c.resolved), list('Problemas nuevos', c.appeared)),
+    el('p', { class: 'meta' }, 'El rendimiento de laboratorio de Lighthouse varía unos ±5-10 puntos entre ejecuciones aunque la web no cambie: aquí solo cuenta como mejora o empeoramiento un cambio de 10 puntos o más en Rendimiento (5 en el resto).'
+      + (counts.nueva || counts.eliminada ? ' Hay URLs que solo están en una de las dos auditorías: suele deberse al muestreo. Para comparar las mismas URLs, lanza las auditorías con «Solo estas rutas» o «Auditar todas las URLs, sin muestreo».' : '')
+      + (c.skipped.length ? ` No se comparan los problemas de ${c.skipped.join(' ni de ')} porque una de las dos auditorías no los tiene.` : '')),
+    el('div', { class: 'table' }, el('table', {},
+      el('thead', {}, el('tr', {}, el('th', {}, 'URL'), el('th', {}, 'Cambio'), ...cats.map(([, n]) => el('th', {}, n)), el('th', {}, 'Problemas'))),
+      el('tbody', {}, ...c.rows.map(r => el('tr', {}, el('td', { class: 'url' }, r.url), el('td', {}, el('span', { class: 'tag-trend ' + r.trend }, labels[r.trend] || r.trend)),
+        ...cats.map(([id]) => el('td', {}, `${r.before?.scores[id] ?? '–'} → ${r.after?.scores[id] ?? '–'}`, r.before && r.after ? deltaTag(r.delta[id], id) : null)),
+        el('td', { title: [r.fixed.length ? 'Resueltos: ' + r.fixed.join('; ') : '', r.added.length ? 'Nuevos: ' + r.added.join('; ') : ''].filter(Boolean).join(String.fromCharCode(10)) }, `${r.before?.issues ?? '–'} → ${r.after?.issues ?? '–'}`)))))));
+  box.hidden = false;
+  box.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+$('#open-compare').addEventListener('click', () => {
+  const box = $('#compare');
+  if (!box.hidden) { box.hidden = true; return; }
+  const host = shownKey.split('/')[0];
+  const others = resultsMeta.filter(m => m.key.split('/')[0] === host && m.key !== shownKey);
+  if (!others.length) {
+    box.replaceChildren(el('div', { class: 'panel-head' }, el('h3', {}, 'Antes y después'), el('button', { class: 'btn-text', onclick: () => { box.hidden = true; } }, 'Cerrar')),
+      el('p', { class: 'meta' }, 'Solo hay una auditoría de este sitio. Para ver el antes y el después, vuelve a auditarlo cuando apliques los cambios (con el mismo dispositivo y, mejor, con las mismas rutas).'));
+    box.hidden = false; return;
+  }
+  const sel = el('select', { 'aria-label': 'Auditoría anterior' }, ...others.map(m => el('option', { value: m.key }, `${m.formFactor === 'desktop' ? 'Escritorio' : 'Móvil'} · ${m.count} URL${m.count === 1 ? '' : 's'} · ${new Date(m.updated).toLocaleString('es-ES', { dateStyle: 'short', timeStyle: 'short' })}`)));
+  const status = el('p', { class: 'msg', role: 'status' });
+  box.replaceChildren(el('div', { class: 'panel-head' }, el('h3', {}, 'Antes y después'), el('button', { class: 'btn-text', onclick: () => { box.hidden = true; } }, 'Cerrar')),
+    el('p', { class: 'meta' }, 'Elige la auditoría de «antes». La que estás viendo será el «después».'),
+    el('div', { class: 'inline-form' }, sel, el('button', { class: 'btn btn-small', onclick: async () => {
+      status.textContent = 'Comparando…';
+      try { showCompare(await json(`/api/compare?before=${encodeURIComponent(sel.value)}&after=${encodeURIComponent(shownKey)}`)); } catch (err) { status.textContent = 'Error: ' + err.message; }
+    } }, 'Comparar')), status);
+  box.hidden = false;
+});
+
 function originNote(reports) {
   const origin = reports.find(r => r.field?.scope === 'origin')?.field;
   if (!settings.crux?.enabled || !origin) return null;

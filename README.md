@@ -8,6 +8,9 @@ Herramienta local de auditoría de SEO técnico, URL a URL: **rendimiento** (Goo
 - Muestra el **informe Lighthouse completo de cada URL**, en español.
 - Ordena las URLs por **gravedad** (Alta / Media / Baja), dando más peso a Rendimiento y SEO.
 - Muestra los **datos de usuarios reales** (Core Web Vitals de CrUX, los mismos de PageSpeed Insights) junto a los de laboratorio, con una clave gratuita de Google.
+- **Evolución de usuarios reales** del dominio en los últimos 6 meses (LCP, INP y CLS, semana a semana).
+- **Competencia:** Core Web Vitals reales de tu dominio frente a los de hasta 6 competidores.
+- **Antes y después:** compara dos auditorías del mismo sitio (medias, URLs que mejoran o empeoran, problemas resueltos y nuevos) y genera un resumen para el cliente con Claude.
 - Opcional: **Google Search Console** (datos reales de Google): si cada URL está indexada, si Googlebot pudo descargarla (bloqueos de firewall o CDN), la canonical que eligió y su último rastreo.
 - Opcional: **Renderizado para Google**, que avisa de recursos bloqueados por robots.txt y de contenido que solo aparece con JavaScript.
 - **Analizar con Claude**: descarga un .md con los datos y las instrucciones de análisis ya escritas; basta con soltarlo en una conversación de Claude.

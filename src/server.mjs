@@ -226,6 +226,80 @@ async function deleteAudit(key) {
   for (const file of reportCache.keys()) if (file.startsWith(dir + sep)) reportCache.delete(file);
   for (const a of audits.values()) if (a.key === key) audits.delete(a.id);
 }
+// Antes y después: compara dos auditorías URL a URL (puntuaciones, problemas y usuarios reales)
+async function compareAudits(beforeKey, afterKey) {
+  const [A, B] = await Promise.all([resultReports(beforeKey), resultReports(afterKey)]);
+  const norm = u => u.replace(/\/$/, '');
+  const byUrl = new Map(A.map(r => [norm(r.url), r]));
+  const cats = Object.keys(scoreNames);
+  const vital = (r, id) => r?.field && r.field.scope !== 'origin' ? r.field.metrics[id]?.p75 ?? null : null;
+  // solo se comparan los problemas de comprobaciones que existan en las dos auditorías
+  const both = cat => cat === 'render' ? A.some(r => r.render) && B.some(r => r.render) : cat === 'google' ? A.some(r => r.google) && B.some(r => r.google) : true;
+  // el rendimiento de laboratorio varía ±5-10 puntos entre ejecuciones: por debajo de eso es ruido
+  const threshold = id => id === 'performance' ? 10 : 5;
+  const rows = [], resolved = new Map(), appeared = new Map();
+  for (const b of B) {
+    const a = byUrl.get(norm(b.url));
+    byUrl.delete(norm(b.url));
+    const delta = Object.fromEntries(cats.map(id => [id, a && a.scores[id] != null && b.scores[id] != null ? b.scores[id] - a.scores[id] : null]));
+    const ids = r => new Map((r?.issues || []).filter(i => both(i.category)).map(i => [i.id, i]));
+    const before = ids(a), after = ids(b);
+    const fixed = [...before.values()].filter(i => !after.has(i.id)), added = [...after.values()].filter(i => !before.has(i.id));
+    if (a) { fixed.forEach(i => resolved.set(i.id, { title: i.title, category: i.category, urls: (resolved.get(i.id)?.urls || 0) + 1 })); added.forEach(i => appeared.set(i.id, { title: i.title, category: i.category, urls: (appeared.get(i.id)?.urls || 0) + 1 })); }
+    const up = cats.some(id => delta[id] != null && delta[id] >= threshold(id)), down = cats.some(id => delta[id] != null && delta[id] <= -threshold(id));
+    const trend = !a ? 'nueva' : down && !up ? 'peor' : up && !down ? 'mejor' : up && down ? 'mixta' : 'igual';
+    rows.push({ url: b.url, trend, before: a && { scores: a.scores, level: a.level, issues: a.issues.length, lcp: vital(a, 'lcp'), inp: vital(a, 'inp'), cls: vital(a, 'cls') },
+      after: { scores: b.scores, level: b.level, issues: b.issues.length, lcp: vital(b, 'lcp'), inp: vital(b, 'inp'), cls: vital(b, 'cls') }, delta,
+      fixed: fixed.map(i => i.title), added: added.map(i => i.title), report: b.report, beforeReport: a?.report });
+  }
+  for (const a of byUrl.values()) rows.push({ url: a.url, trend: 'eliminada', before: { scores: a.scores, level: a.level, issues: a.issues.length }, after: null, delta: {}, fixed: [], added: [] });
+  const common = rows.filter(r => r.before && r.after);
+  const avg = (side, id) => { const v = common.map(r => r[side].scores[id]).filter(x => x != null); return v.length ? Math.round(v.reduce((t, x) => t + x, 0) / v.length) : null; };
+  const order = { peor: 0, mixta: 1, mejor: 2, igual: 3, nueva: 4, eliminada: 5 };
+  rows.sort((x, y) => order[x.trend] - order[y.trend] || (x.delta.performance ?? 0) - (y.delta.performance ?? 0));
+  const meta = key => key.split('/')[0];
+  // saldo neto por problema: si desaparece de unas URLs y aparece en otras, cuenta la diferencia
+  for (const [id, r] of resolved) {
+    const n = r.urls - (appeared.get(id)?.urls || 0);
+    if (n > 0) { r.urls = n; appeared.delete(id); } else { resolved.delete(id); if (n < 0) appeared.get(id).urls = -n; else appeared.delete(id); }
+  }
+  const top = m => [...m.values()].sort((x, y) => y.urls - x.urls).slice(0, 15);
+  const date = rs => rs[0]?.fetchTime || null;
+  return {
+    before: { key: beforeKey, date: date(A), count: A.length }, after: { key: afterKey, date: date(B), count: B.length }, host: meta(afterKey),
+    averages: Object.fromEntries(cats.map(id => [id, { before: avg('before', id), after: avg('after', id) }])),
+    counts: Object.fromEntries(Object.keys(order).map(t => [t, rows.filter(r => r.trend === t).length])),
+    skipped: ['render', 'google'].filter(c => !both(c)).map(c => catNames[c]),
+    resolved: top(resolved), appeared: top(appeared), rows
+  };
+}
+async function exportCompareMarkdown(beforeKey, afterKey) {
+  const c = await compareAudits(beforeKey, afterKey);
+  const d = s => s ? new Date(s).toLocaleDateString('es-ES') : '—';
+  const sign = v => v == null ? '–' : (v > 0 ? '+' : '') + v;
+  const lines = [
+    `# Antes y después — ${c.host}`, '',
+    `- Antes: auditoría del ${d(c.before.date)} (${c.before.count} URLs)`,
+    `- Después: auditoría del ${d(c.after.date)} (${c.after.count} URLs)`, '',
+    ...claudeBrief([
+      'Resume en 3-5 frases qué ha mejorado y qué ha empeorado entre las dos auditorías.',
+      'Explica las causas probables de los empeoramientos usando los problemas nuevos, y qué falta por resolver.',
+      'Redacta un párrafo breve, en lenguaje no técnico, para enviar al cliente con los resultados del trabajo realizado.'
+    ]),
+    '## Media de puntuaciones (URLs presentes en las dos auditorías)', '',
+    ...Object.entries(scoreNames).map(([id, n]) => `- ${n}: ${c.averages[id].before ?? '–'} → ${c.averages[id].after ?? '–'} (${sign(c.averages[id].after != null && c.averages[id].before != null ? c.averages[id].after - c.averages[id].before : null)})`), '',
+    `URLs que mejoran: ${c.counts.mejor} · empeoran: ${c.counts.peor} · mixtas: ${c.counts.mixta} · iguales: ${c.counts.igual} · nuevas: ${c.counts.nueva} · ya no aparecen: ${c.counts.eliminada}`, '',
+    'Nota: el rendimiento de laboratorio de Lighthouse varía unos ±5-10 puntos entre ejecuciones sin que cambie la web; aquí solo cuenta como mejora o empeoramiento un cambio de 10 puntos o más en Rendimiento (5 en el resto). Si hay URLs «nuevas» o que «ya no aparecen», probablemente se deba al muestreo de URLs.', '',
+    '## Problemas resueltos', '', ...(c.resolved.length ? c.resolved.map(i => `- [${catNames[i.category]}] ${i.title} — ${i.urls} URL${i.urls > 1 ? 's' : ''}`) : ['- Ninguno']), '',
+    '## Problemas nuevos', '', ...(c.appeared.length ? c.appeared.map(i => `- [${catNames[i.category]}] ${i.title} — ${i.urls} URL${i.urls > 1 ? 's' : ''}`) : ['- Ninguno']), '',
+    '## URLs', ''
+  ];
+  for (const r of c.rows) {
+    const scores = Object.entries(scoreNames).map(([id, n]) => `${n} ${r.before?.scores[id] ?? '–'}→${r.after?.scores[id] ?? '–'}`).join(' · ');
+    lines.push(`- ${r.url} — **${r.trend}** · ${scores}${r.fixed.length ? ` · resueltos: ${r.fixed.slice(0, 5).join('; ')}` : ''}${r.added.length ? ` · nuevos: ${r.added.slice(0, 5).join('; ')}` : ''}`);
+  }
+  return lines.join('\n');
+}
 // Limpia el registro completo (no toca claves ni conexiones, que están en settings.json)
 async function deleteAllAudits() {
   if ([...audits.values()].some(a => a.running || a.rendering) || collecting.size) throw Error('Hay una auditoría en curso o consultando datos. Espera a que termine o detenla antes de limpiar el registro.');
@@ -346,6 +420,26 @@ function issues(lh) {
 const scoreNames = { performance: 'Rendimiento', accessibility: 'Accesibilidad', 'best-practices': 'Buenas prácticas', seo: 'SEO' };
 const catNames = { ...scoreNames, render: 'Renderizado para Google', google: 'Google (Search Console)' };
 const levelNames = { alta: 'Alta', media: 'Media', baja: 'Baja' };
+// Evolución de usuarios reales y competencia (si se han consultado) para el .md
+async function contextLines(key) {
+  const dir = auditDir(key), lines = [];
+  const hist = await readFile(join(dir, 'crux-history.json'), 'utf-8').then(JSON.parse).then(c => c.data).catch(() => null);
+  if (hist?.periods?.length) {
+    lines.push('## Evolución de usuarios reales del dominio (CrUX)', '', `Percentil 75 por periodos de 28 días, del ${new Date(hist.periods[0]).toLocaleDateString('es-ES')} al ${new Date(hist.periods.at(-1)).toLocaleDateString('es-ES')}:`, '');
+    for (const id of ['lcp', 'inp', 'cls']) {
+      const v = (hist.series[id] || []).filter(x => x != null);
+      if (v.length) lines.push(`- ${fieldNames[id]}: ${fieldFormat[id](v[0])} → ${fieldFormat[id](v.at(-1))} (mínimo ${fieldFormat[id](Math.min(...v))}, máximo ${fieldFormat[id](Math.max(...v))})`);
+    }
+    lines.push('');
+  }
+  const bench = await crux.savedBenchmark(dir);
+  if (bench?.results?.length) {
+    lines.push('## Usuarios reales frente a la competencia (CrUX, 28 días)', '');
+    for (const r of bench.results) lines.push(`- ${r.domain}${r.own ? ' (esta web)' : ''}: ` + (r.field ? ['lcp', 'inp', 'cls'].filter(id => r.field.metrics[id]).map(id => `${fieldNames[id]} ${fieldFormat[id](r.field.metrics[id].p75)} (${ratingNames[r.field.metrics[id].rating]})`).join(' · ') : 'sin datos suficientes'));
+    lines.push('');
+  }
+  return lines;
+}
 async function exportMarkdown(key) {
   const reports = await resultReports(key);
   const first = reports[0] || {};
@@ -368,6 +462,7 @@ async function exportMarkdown(key) {
       'Propón un plan de acción priorizado por impacto y esfuerzo: qué cambiar exactamente, quién lo hace (SEO, contenido o desarrollo) y cómo comprobar que está resuelto.',
       'Indica qué URLs revisar primero y por qué.'
     ]),
+    ...await contextLines(key),
     '## Problemas repetidos en varias URLs', '',
     ...[...repeated.values()].sort((a, b) => b.urls - a.urls).slice(0, 20).map(e => `- [${catNames[e.category]}] ${e.title} — ${e.urls} URL${e.urls > 1 ? 's' : ''}`), '',
     '## URLs por prioridad', ''
@@ -495,6 +590,24 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method === 'GET' && path.startsWith('/api/results/')) return send(200, await resultReports(path.slice('/api/results/'.length)));
     if (req.method === 'DELETE' && path === '/api/results') return send(200, { deleted: await deleteAllAudits() });
+    if (req.method === 'GET' && path === '/api/compare') return send(200, await compareAudits(query.get('before'), query.get('after')));
+    if (req.method === 'GET' && path === '/api/export/compare.md') {
+      const name = `antes-despues-${query.get('after').split('/')[0].replace(/[^\w.-]+/g, '-')}.md`;
+      res.writeHead(200, { 'Content-Type': 'text/markdown; charset=utf-8', 'Content-Disposition': `attachment; filename="${name}"` });
+      return res.end(await exportCompareMarkdown(query.get('before'), query.get('after')));
+    }
+    if (path.startsWith('/api/crux-history/')) {
+      const key = path.slice('/api/crux-history/'.length), first = (await resultReports(key))[0];
+      return send(200, first ? await crux.history(auditDir(key), new URL(first.url).origin, first.formFactor) : null);
+    }
+    if (path.startsWith('/api/benchmark/')) {
+      const key = path.slice('/api/benchmark/'.length), dir = auditDir(key);
+      if (req.method === 'GET') return send(200, await crux.savedBenchmark(dir));
+      const first = (await resultReports(key))[0];
+      const domains = String((await readJson(req)).domains || '').split(/[\s,;]+/).filter(Boolean).slice(0, 6);
+      if (!domains.length) throw Error('Escribe al menos un dominio de la competencia.');
+      return send(200, await crux.benchmark(dir, new URL(first.url).host, domains, first.formFactor));
+    }
     if (req.method === 'DELETE' && path.startsWith('/api/results/')) { await deleteAudit(path.slice('/api/results/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }

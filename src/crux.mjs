@@ -4,7 +4,8 @@ import { readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 
 const version = 2;
-const endpoint ='https://chromeuxreport.googleapis.com/v1/records:queryRecord';
+const endpoint = 'https://chromeuxreport.googleapis.com/v1/records:queryRecord';
+const historyEndpoint = 'https://chromeuxreport.googleapis.com/v1/records:queryHistoryRecord';
 // Umbrales oficiales de Google: bueno hasta el primero, malo desde el segundo
 const metrics = {
   lcp: { api: 'largest_contentful_paint', good: 2500, poor: 4000 },
@@ -20,12 +21,12 @@ export function createCrux(root) {
   const apiKey = async () => process.env.CRUX_API_KEY || (await readSettings()).cruxApiKey || '';
 
   let last = 0;
-  async function query(key, body) {
+  async function query(key, body, url = endpoint) {
     // la API admite 150 consultas por minuto: se espacian a ~2,4 por segundo
     const wait = last + 420 - Date.now();
     if (wait > 0) await new Promise(r => setTimeout(r, wait));
     last = Date.now();
-    const res = await fetch(`${endpoint}?key=${encodeURIComponent(key)}`, {
+    const res = await fetch(`${url}?key=${encodeURIComponent(key)}`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000)
     });
     if (res.status === 404) return null; // sin tráfico suficiente para tener datos
@@ -81,6 +82,48 @@ export function createCrux(root) {
       }
       return cache.data;
     },
+    // Evolución semanal (ventanas de 28 días) de LCP, INP y CLS del dominio: últimos ~6 meses.
+    // Google la actualiza cada semana: se guarda con la auditoría y se refresca a los 3 días.
+    async history(dir, origin, formFactor) {
+      const file = join(dir, 'crux-history.json');
+      const cache = await readFile(file, 'utf-8').then(JSON.parse).catch(() => null);
+      if (cache && Date.now() - new Date(cache.fetchedAt) < 3 * 864e5) return cache.data;
+      const key = await apiKey();
+      if (!key) return null;
+      const device = formFactor === 'desktop' ? 'DESKTOP' : 'PHONE';
+      const record = await query(key, { origin, formFactor: device, metrics: ['lcp', 'inp', 'cls'].map(id => metrics[id].api), collectionPeriodCount: 25 }, historyEndpoint);
+      const date = d => d && `${d.year}-${String(d.month).padStart(2, '0')}-${String(d.day).padStart(2, '0')}`;
+      const data = record && {
+        origin, formFactor: device,
+        periods: (record.collectionPeriods || []).map(p => date(p.lastDate)),
+        series: Object.fromEntries(['lcp', 'inp', 'cls'].map(id => [id, (record.metrics?.[metrics[id].api]?.percentilesTimeseries?.p75s || []).map(v => v == null || v === 'NaN' ? null : Number(v))]))
+      };
+      await writeFile(file, JSON.stringify({ fetchedAt: new Date().toISOString(), data }), 'utf-8');
+      return data;
+    },
+    // Usuarios reales de tu dominio frente a los de la competencia (dato actual de 28 días)
+    async benchmark(dir, own, domains, formFactor) {
+      const key = await apiKey();
+      if (!key) throw Error('Añade tu clave de CrUX en Ajustes para comparar con la competencia.');
+      const device = formFactor === 'desktop' ? 'DESKTOP' : 'PHONE';
+      const results = [];
+      for (const d of [own, ...domains]) {
+        const host = String(d).trim().replace(/^https?:\/\//, '').replace(/\/.*$/, '').toLowerCase();
+        if (!host || results.some(r => r.domain === host)) continue;
+        // si no hay datos con www o sin www, se prueba la otra variante
+        const variants = host.startsWith('www.') ? [host, host.slice(4)] : [host, 'www.' + host];
+        let field = null, origin = 'https://' + variants[0];
+        for (const v of variants) {
+          field = summarize(await query(key, { origin: 'https://' + v, formFactor: device }), 'origin');
+          if (field) { origin = 'https://' + v; break; }
+        }
+        results.push({ domain: host, origin, own: results.length === 0, field });
+      }
+      const data = { formFactor: device, fetchedAt: new Date().toISOString(), domains: domains, results };
+      await writeFile(join(dir, 'benchmark.json'), JSON.stringify(data), 'utf-8');
+      return data;
+    },
+    savedBenchmark: dir => readFile(join(dir, 'benchmark.json'), 'utf-8').then(JSON.parse).catch(() => null),
     async cached(dir) {
       const cache = await readFile(join(dir, 'crux.json'), 'utf-8').then(JSON.parse).catch(() => null);
       if (!cache?.data) return null;

@@ -190,6 +190,10 @@ function renderIssues(g) {
   }));
 }
 const renderActions = {
+  'La URL responde con un error HTTP': 'Corrige el error del servidor o, si la página ya no existe, redirígela con un 301 a la URL equivalente y actualiza los enlaces internos que apuntan aquí.',
+  'Bloqueada para indexación por la cabecera X-Robots-Tag': 'El servidor envía X-Robots-Tag: noindex (suele venir del hosting, de reglas en .htaccess o de un plugin de seguridad o SEO). Si la página debe posicionar, quita esa cabecera; si es intencionado, ignora este aviso.',
+  'La página tiene noindex': 'Si la página debe posicionar, quita el noindex (en WordPress suele estar en el plugin SEO de la propia página o en «Ajustes → Lectura → Disuadir a los motores de búsqueda»). Si es intencionado, ignora este aviso.',
+  'La canonical apunta a otra URL': 'Si esta URL es la que debe posicionar, haz que su canonical apunte a sí misma. Si de verdad es un duplicado, está bien; en ese caso evita enlazarla internamente y sácala del sitemap.',
   'La URL está bloqueada para Googlebot en robots.txt': 'Si la URL debe posicionar, quita o ajusta la regla Disallow indicada en robots.txt. Si no debe indexarse, usa noindex en lugar de bloquearla (si está bloqueada, Google no puede ver el noindex).',
   'Recursos del propio sitio bloqueados por robots.txt': 'Tu robots.txt impide a Googlebot descargar los archivos indicados en «Dónde», y sin ellos Google puede ver la página rota o sin contenido. Quita o ajusta la regla Disallow que aparece junto a cada uno (p. ej. añade «Allow: /wp-content/» o «Allow: /*.js» y «Allow: /*.css»).',
   'robots.txt no disponible': 'Haz que /robots.txt responda con 200 (o 404 si no lo usas). Si responde con error 5xx, Google puede dejar de rastrear el sitio temporalmente.',
@@ -204,13 +208,13 @@ const renderActions = {
   'Mucho contenido principal oculto (display:none)': 'Gran parte del texto está en pestañas, acordeones o bloques plegados. Google suele indexarlo, pero lo más importante (lo que responde a la búsqueda) debería estar visible al cargar. Asegúrate de que el contenido clave está visible al cargar.',
   'Texto que solo aparece con JavaScript':'Haz que el contenido principal esté en el HTML que envía el servidor (renderizado en servidor o HTML estático). Si depende de JavaScript, su indexación depende de que Google renderice bien la página. Si es intencionado, compruébalo en la Inspección de URLs de Search Console.'
 };
-async function collectRender(key) {
+async function collectRender(key, force) {
   if ([...audits.values()].some(a => a.running && a.key === key)) throw Error('Espera a que termine la auditoría: comprobar el renderizado a la vez falsearía las mediciones de rendimiento.');
   if (!collecting.has('render:' + key)) {
     const job = (async () => {
       const dir = auditDir(key);
       const reports = await Promise.all((await findReports(join(dir, 'reports'))).map(f => readReport(f).catch(() => null)));
-      await render.collect(dir, reports.filter(Boolean));
+      await render.collect(dir, reports.filter(Boolean), force);
     })().finally(() => collecting.delete('render:' + key));
     collecting.set('render:' + key, job);
   }
@@ -609,7 +613,7 @@ const server = http.createServer(async (req, res) => {
       return send(200, await crux.benchmark(dir, new URL(first.url).host, domains, first.formFactor));
     }
     if (req.method === 'DELETE' && path.startsWith('/api/results/')) { await deleteAudit(path.slice('/api/results/'.length)); return send(200, { ok: true }); }
-    if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length)); return send(200, { ok: true }); }
+    if (req.method === 'POST' && path.startsWith('/api/render/')) { await collectRender(path.slice('/api/render/'.length), query.get('force') === '1'); return send(200, { ok: true }); }
     if (req.method === 'POST' && path.startsWith('/api/field/')) { await collectField(path.slice('/api/field/'.length)); return send(200, { ok: true }); }
     if (req.method === 'GET' && path === '/api/settings') return send(200, { crux: await crux.status(), gsc: await gscStatus() });
     if (req.method === 'POST' && path === '/api/settings') { await crux.saveKey((await readJson(req)).cruxApiKey); return send(200, { crux: await crux.status(), gsc: await gscStatus() }); }

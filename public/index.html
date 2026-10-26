@@ -223,6 +223,7 @@ footer a{color:var(--ink)}
         <button class="btn-outline" id="analyze" title="Descarga el resumen priorizado con las instrucciones para Claude">Analizar con Claude</button>
         <button class="btn-outline" data-export="csv">Descargar CSV</button>
         <button class="btn-outline" id="check-render" hidden title="Comprueba robots.txt y HTML inicial frente a renderizado en todas las URLs de esta auditoría">Comprobar renderizado para Google</button>
+        <button class="btn-outline" id="recheck-render" hidden title="Repite la comprobación de renderizado de todas las URLs con la versión actual">Volver a comprobar renderizado</button>
         <button class="btn-outline" id="open-compare" title="Compara esta auditoría con otra anterior del mismo sitio: qué ha mejorado y qué ha empeorado">Antes y después</button>
         <button class="btn-outline" id="open-bench" title="Compara los usuarios reales de este dominio con los de la competencia">Competencia</button>
         <button class="btn-outline btn-danger" id="delete-audit" title="Elimina esta auditoría y todos sus informes de este equipo">Borrar auditoría</button>
@@ -409,6 +410,7 @@ async function showResult(key, quiet) {
   const meta = resultsMeta.find(m => m.key === key);
   const showRender = !!meta?.render || renderLoading.has(key) || reports.some(r => r.render);
   $('#check-render').hidden = showRender;
+  $('#recheck-render').hidden = !showRender || renderLoading.has(key);
   $('#reports').replaceChildren(...(reports.length ? [originNote(reports)].filter(Boolean) : []), reports.length ? el('table', {},
     el('thead', {}, el('tr', {}, el('th', {}, 'Prioridad'), el('th', {}, 'URL'), ...cats.map(c => el('th', {}, c[1])),
       el('th', { title: 'Core Web Vitals de visitantes reales de Chrome (CrUX), percentil 75 de los últimos 28 días' }, 'Usuarios reales ',
@@ -456,12 +458,12 @@ function renderCell(r) {
   const detail = r.render.error || r.render.findings.map(f => '• ' + f.title + (f.value ? ': ' + f.value : '')).join(String.fromCharCode(10)) || 'Sin recursos bloqueados y el HTML inicial ya contiene lo importante';
   return el('span', { class: 'score ' + cls, title: detail }, text);
 }
-async function checkRender(key) {
+async function checkRender(key, force) {
   renderLoading.add(key);
   if (shownKey === key) showResult(key, true);
   const poll = setInterval(() => shownKey === key && showResult(key, true), 4000);
   try {
-    const res = await fetch('/api/render/' + key, { method: 'POST' });
+    const res = await fetch('/api/render/' + key + (force ? '?force=1' : ''), { method: 'POST' });
     if (!res.ok) renderError[key] = (await res.json()).error;
   } catch (err) { renderError[key] = err.message; }
   if (renderError[key]) { $('#analysis').hidden = false; $('#analysis').textContent = 'Renderizado para Google: ' + renderError[key]; delete renderError[key]; }
@@ -470,6 +472,7 @@ async function checkRender(key) {
   if (shownKey === key) { await loadResults(); }
 }
 $('#check-render').addEventListener('click', () => checkRender(shownKey));
+$('#recheck-render').addEventListener('click', () => { if (confirm('¿Volver a comprobar el renderizado de todas las URLs de esta auditoría? Tarda entre 10 y 30 segundos por URL.')) checkRender(shownKey, true); });
 $('#delete-audit').addEventListener('click', async () => {
   const label = $('#results').selectedOptions[0]?.textContent || shownKey;
   if (!confirm(`¿Borrar la auditoría «${label}»?\n\nSe eliminan de este equipo sus informes Lighthouse y los datos de usuarios reales, renderizado y Search Console. No se puede deshacer.`)) return;

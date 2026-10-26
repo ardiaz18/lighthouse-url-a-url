@@ -91,9 +91,10 @@ Marca **Comprobar renderizado para Google** al lanzar una auditoría, o pulsa el
 
 - **Recursos bloqueados por robots.txt:** JS, CSS y peticiones de datos **del propio sitio** que Googlebot no puede descargar según las reglas de Google (los de otros dominios se ignoran: su robots.txt no depende de ti) (grupo de Googlebot o `*`, la regla más larga gana). Sin ellos Google puede ver la página rota.
 - **HTML inicial frente a renderizado:** si la meta robots, la canonical, el título, el H1, los enlaces internos o el texto solo aparecen (o cambian) al ejecutar JavaScript.
+- **Indexabilidad:** errores HTTP, `noindex` en la meta robots o en la cabecera `X-Robots-Tag` y canonical que apunta a otra URL.
 - **Contenido oculto por CSS:** renderiza como Google (pantalla tan alta como la página, sin scroll ni clics) y mide el texto principal invisible (`opacity`, `visibility`, `display:none`). Después interactúa como una persona (ratón y rueda) para distinguir lo que **solo aparece al interactuar** —Googlebot no interactúa; causa habitual: animaciones de entrada con «Retrasar JavaScript» de WP Rocket, LiteSpeed o Perfmatters— de carruseles, pestañas y efectos. Fiabilidad media: el renderizador de Google no se puede reproducir exacto.
 
-Imita el renderizado de Google, pero no es su vista real: no detecta bloqueos por IP ni sabe qué ha indexado Google (para eso, conecta Search Console). Añade entre 10 y 30 segundos por URL.
+Imita el renderizado de Google: cada URL en un contexto limpio (sin cookies, caché ni service workers), pantalla de Googlebot smartphone, espera a que la página se estabilice y animaciones CSS adelantadas, como hace Google. Aun así no es su vista real: no detecta bloqueos por IP ni sabe qué ha indexado Google (para eso, conecta Search Console). Añade entre 10 y 30 segundos por URL.
 
 ## Limitaciones
 

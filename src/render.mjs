@@ -6,8 +6,11 @@ import { join } from 'node:path';
 import puppeteer from 'puppeteer-core';
 import { Launcher } from 'chrome-launcher';
 
-const version = 4; // 3: contenido oculto por CSS con pasada de scroll
-const mobileUA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
+// 5: renderizado más parecido al de Google (contexto limpio, espera a que se estabilice, animaciones
+// adelantadas, HTML inicial del propio Chrome) e indexabilidad. Los resultados de la 4 se siguen mostrando.
+const version = 5;
+// Chrome móvil con la versión real del Chrome instalado (se ajusta al arrancar)
+let mobileUA = 'Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Mobile Safari/537.36';
 const critical = new Set(['Script', 'Stylesheet', 'XHR', 'Fetch']);
 
 // --- robots.txt según las reglas de Google (RFC 9309): grupo de Googlebot o *, la regla más larga gana, Allow gana empates
@@ -154,40 +157,68 @@ export async function checkUrl(browser, url, requests) {
   }
   findings.push(...blockedFindings(url, blocked));
 
-  // 2. HTML inicial frente a renderizado (misma extracción en los dos)
-  const res = await fetch(url, { headers: { 'User-Agent': mobileUA }, signal: AbortSignal.timeout(20000) });
-  const finalUrl = res.url;
-  const html = await res.text();
-  const tab = await browser.newPage();
+  // 2. Renderizado lo más parecido posible al de Google (Web Rendering Service):
+  //    cada URL en un contexto nuevo (sin cookies, caché ni almacenamiento de otras URLs), sin service
+  //    workers, con los permisos denegados y la pantalla de Googlebot smartphone (412 px, densidad 2,625)
+  const context = await browser.createBrowserContext();
+  const tab = await context.newPage();
+  const view = height => ({ width: 412, height, isMobile: true, hasTouch: true, deviceScaleFactor: 2.625 });
   try {
+    await tab.setBypassServiceWorker(true);
     await tab.setUserAgent(mobileUA);
-    await tab.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
-    await tab.goto(url, { waitUntil: 'networkidle2', timeout: 45000 }).catch(() => {});
-    await new Promise(r => setTimeout(r, 1500));
+    await tab.setViewport(view(732));
+    // Google adelanta el tiempo al renderizar: las animaciones y transiciones CSS terminan para él
+    const cdp = await tab.createCDPSession();
+    await cdp.send('Animation.enable');
+    await cdp.send('Animation.setPlaybackRate', { playbackRate: 50 });
+    const response = await tab.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 }).catch(() => null);
+    if (!response) throw Error('La página no respondió en 45 segundos');
+    // HTML inicial tal como lo entrega el servidor al navegador (antes de ejecutar JavaScript)
+    const status = response.status(), headers = response.headers(), finalUrl = tab.url();
+    const html = await response.text().catch(() => '');
+    await settle(tab, 12000);
     const rendered = await tab.evaluate(extract, host);
-    // Google renderiza con una pantalla tan alta como la página y sin hacer scroll
+    // pantalla tan alta como la página, sin scroll: así se disparan las cargas por visibilidad, como en Google
     const height = await tab.evaluate(() => Math.min(document.documentElement.scrollHeight, 12000));
-    await tab.setViewport({ width: 412, height: Math.max(915, height), isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
-    await new Promise(r => setTimeout(r, 3000));
+    await tab.setViewport(view(Math.max(732, height)));
+    await settle(tab, 6000);
     const css = await tab.evaluate(hiddenContent);
+    // confirmación: lo que aparece con un poco más de tiempo estaba a mitad de animación, no oculto
+    await new Promise(r => setTimeout(r, 1500));
+    const late = new Set(await tab.evaluate(() => [...document.querySelectorAll('[data-ssr-hidden]')].filter(e => e.checkVisibility({ opacityProperty: true, visibilityProperty: true })).map(e => Number(e.dataset.ssrHidden))));
+    css.groups = css.groups.filter(g => !late.has(g.id));
+    css.hidden = css.groups.reduce((t, g) => t + g.words, 0);
     // segunda pasada: interactuar como una persona (ratón y rueda). Muchos plugins (WP Rocket, LiteSpeed,
     // Perfmatters…) retrasan el JavaScript hasta la primera interacción; Googlebot nunca interactúa
-    await tab.setViewport({ width: 412, height: 915, isMobile: true, hasTouch: true, deviceScaleFactor: 1 });
+    await tab.setViewport(view(732));
     await tab.mouse.move(120, 300);
     await tab.mouse.move(200, 420, { steps: 5 });
-    for (let y = 0; y < height + 915; y += 500) { await tab.mouse.wheel({ deltaY: 500 }); await new Promise(r => setTimeout(r, 150)); }
-    await new Promise(r => setTimeout(r, 1500));
+    for (let y = 0; y < height + 732; y += 500) { await tab.mouse.wheel({ deltaY: 500 }); await new Promise(r => setTimeout(r, 150)); }
+    await settle(tab, 5000);
     const revealed = new Set(await tab.evaluate(() => [...document.querySelectorAll('[data-ssr-hidden]')].filter(e => e.checkVisibility({ opacityProperty: true, visibilityProperty: true })).map(e => Number(e.dataset.ssrHidden))));
     css.groups.forEach(g => { g.onScroll = revealed.has(g.id); });
-    await tab.setJavaScriptEnabled(false);
-    await tab.setRequestInterception(true);
-    tab.on('request', r => r.isNavigationRequest() ? r.continue() : r.abort());
+    // el HTML inicial se analiza igual que el renderizado, sin JavaScript ni recursos
+    const raw = await context.newPage();
+    await raw.setJavaScriptEnabled(false);
+    await raw.setRequestInterception(true);
+    raw.on('request', r => r.url() === 'about:blank' ? r.continue() : r.abort());
     const withBase = /<head[^>]*>/i.test(html) ? html.replace(/<head[^>]*>/i, m => `${m}<base href="${finalUrl}">`) : `<base href="${finalUrl}">${html}`;
-    await tab.goto('about:blank');
-    await tab.setContent(withBase, { waitUntil: 'domcontentloaded', timeout: 20000 });
-    const initial = await tab.evaluate(extract, host);
+    await raw.setContent(withBase, { waitUntil: 'domcontentloaded', timeout: 20000 });
+    const initial = await raw.evaluate(extract, host);
 
-    const noindex = s => /noindex/.test(s);
+    // indexabilidad: lo que Google mira antes incluso de renderizar
+    const noindex = s => /noindex|none/.test(s || '');
+    // X-Robots-Tag: «noindex» para todos o «googlebot: noindex»; las reglas de otros robots no cuentan
+    const xNoindex = String(headers['x-robots-tag'] || '').toLowerCase().split(/,(?![^:]*,)|\n/).some(part => {
+      const m = part.match(/^\s*([a-z-]+)\s*:\s*(.*)$/);
+      const [bot, rules] = m && !['noindex', 'nofollow', 'none', 'max-snippet', 'unavailable_after'].includes(m[1]) ? [m[1], m[2]] : ['', part];
+      return (!bot || bot === 'googlebot') && /\b(noindex|none)\b/.test(rules);
+    });
+    if (status >= 400) add('problema', 'La URL responde con un error HTTP', `Código ${status}: Google no indexa páginas que devuelven errores`);
+    if (xNoindex) add('problema', 'Bloqueada para indexación por la cabecera X-Robots-Tag', `X-Robots-Tag: ${headers['x-robots-tag']}`);
+    if (noindex(rendered.robots) && noindex(initial.robots)) add('problema', 'La página tiene noindex', `meta robots: «${rendered.robots}»`);
+    const clean = u => { try { const x = new URL(u); return (x.origin + x.pathname).replace(/\/$/, ''); } catch { return u; } };
+    if (rendered.canonical && clean(rendered.canonical) !== clean(finalUrl)) add('aviso', 'La canonical apunta a otra URL', `Esta URL indica como principal ${rendered.canonical}: Google indexará normalmente esa otra`);
     if (noindex(initial.robots) !== noindex(rendered.robots)) add('problema', 'La meta robots cambia con JavaScript', `HTML inicial: «${initial.robots || 'sin meta robots'}» · renderizado: «${rendered.robots || 'sin meta robots'}»`);
     if (initial.canonical !== rendered.canonical) {
       if (!initial.canonical) add('aviso', 'La canonical solo aparece con JavaScript', rendered.canonical);
@@ -210,31 +241,46 @@ export async function checkUrl(browser, url, requests) {
     if (sum(collapsed) >= 100 && share(sum(collapsed)) >= 40) add('aviso', 'Mucho contenido principal oculto (display:none)', `${share(sum(collapsed))} % del texto principal (${sum(collapsed)} palabras) en pestañas, acordeones o bloques ocultos`, list(collapsed));
     return { status: findings.some(f => f.level === 'problema') ? 'problema' : findings.length ? 'aviso' : 'ok', findings, initial, rendered, css: { total: css.total, hidden: css.hidden } };
   } finally {
-    await tab.close().catch(() => {});
+    await context.close().catch(() => {});
   }
+}
+// Espera a que la página «termine», como hace Google antes de tomar el resultado:
+// red casi inactiva y DOM sin cambios durante un momento, con un tiempo máximo
+async function settle(tab, max) {
+  const until = Date.now() + max;
+  await tab.waitForNetworkIdle({ idleTime: 700, concurrency: 2, timeout: Math.max(1000, until - Date.now()) }).catch(() => {});
+  await tab.evaluate(ms => new Promise(resolve => {
+    let timer = setTimeout(done, 800);
+    const obs = new MutationObserver(() => { clearTimeout(timer); timer = setTimeout(done, 800); });
+    const stop = setTimeout(done, ms);
+    function done() { obs.disconnect(); clearTimeout(timer); clearTimeout(stop); resolve(); }
+    obs.observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  }), Math.max(500, until - Date.now())).catch(() => {});
 }
 
 export function createRender() {
   return {
     async cached(dir) {
       const cache = await readFile(join(dir, 'render.json'), 'utf-8').then(JSON.parse).catch(() => null);
-      if (cache?.version !== version) return null;
+      if (cache?.version !== version && cache?.version !== 4) return null;
       return Object.fromEntries(Object.entries(cache.data).map(([url, entry]) => [url, entry.status === 'error' ? entry : reclassify(url, entry)]));
     },
     // comprueba las URLs que falten, de dos en dos, y guarda el resultado con la auditoría
-    async collect(dir, reports) {
-      const data = (await this.cached(dir)) || {};
+    async collect(dir, reports, force) {
+      const data = force ? {} : (await this.cached(dir)) || {};
       const pending = reports.filter(r => !(r.url in data));
       if (!pending.length) return data;
       const executablePath = Launcher.getFirstInstallation();
       if (!executablePath) throw Error('No se encuentra Google Chrome en este equipo.');
       const browser = await puppeteer.launch({ executablePath, headless: true, args: ['--no-first-run', '--no-default-browser-check'] });
+      const chrome = (await browser.version()).split('/')[1];
+      if (chrome) mobileUA = mobileUA.replace(/Chrome\/[\d.]+/, 'Chrome/' + chrome);
       try {
         const queue = [...pending];
         await Promise.all([0, 1].map(async () => {
           for (let r; (r = queue.shift());) {
             data[r.url] = await checkUrl(browser, r.url, r.requests).catch(e => ({ status: 'error', error: e.message, findings: [] }));
-            await writeFile(join(dir, 'render.json'), JSON.stringify({ version, data }), 'utf-8');
+            await writeFile(join(dir, 'render.json'), JSON.stringify({ version: force ? version : (await readFile(join(dir, 'render.json'), 'utf-8').then(JSON.parse).catch(() => ({ version }))).version, data }), 'utf-8');
           }
         }));
       } finally {
